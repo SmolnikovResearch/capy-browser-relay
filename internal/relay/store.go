@@ -60,7 +60,7 @@ type Device struct {
 	TenantID  string    `json:"tenant_id"`
 	Name      string    `json:"name"`
 	Profile   string    `json:"profile,omitempty"`
-	PublicKey string    `json:"public_key,omitempty"` // stored for slice 2 key binding; not verified yet
+	PublicKey string    `json:"public_key,omitempty"` // base64 SPKI P-256; proven at pairing and on every connect
 	TokenHash string    `json:"token_hash"`
 	Created   time.Time `json:"created"`
 	Expires   time.Time `json:"expires"`

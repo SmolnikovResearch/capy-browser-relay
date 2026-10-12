@@ -17,6 +17,7 @@ func main() {
 	listen := flag.String("listen", "127.0.0.1:8787", "listen address")
 	data := flag.String("data", "./data", "state and audit directory")
 	public := flag.Bool("allow-non-loopback", false, "allow binding a non-loopback address")
+	requireKey := flag.Bool("require-device-key", true, "refuse browsers that cannot prove a device key")
 	flag.Parse()
 
 	host, _, err := net.SplitHostPort(*listen)
@@ -26,7 +27,7 @@ func main() {
 	if ip := net.ParseIP(host); !*public && (ip == nil || !ip.IsLoopback()) && host != "localhost" {
 		log.Fatalf("refusing to bind %s: pass -allow-non-loopback to expose the relay", *listen)
 	}
-	srv, err := relay.New(relay.Config{DataDir: *data, AdminToken: os.Getenv("RELAY_ADMIN_TOKEN")})
+	srv, err := relay.New(relay.Config{DataDir: *data, AdminToken: os.Getenv("RELAY_ADMIN_TOKEN"), RequireDeviceKey: *requireKey})
 	if err != nil {
 		log.Fatal(err)
 	}

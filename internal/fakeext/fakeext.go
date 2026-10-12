@@ -6,6 +6,11 @@ package fakeext
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -37,6 +42,12 @@ type Client struct {
 	Misbehave bool
 	// Delay is added to every command (queue tests).
 	Delay time.Duration
+	// Key, when set, is the device key: sent at pairing and used to answer the
+	// connect challenge (same scheme as the real extension).
+	Key *ecdsa.PrivateKey
+	// LocalConfirm makes dangerous clicks behave like the real extension:
+	// the human is asked on the device, the relay is not involved.
+	LocalConfirm bool
 
 	mu       sync.Mutex
 	tabs     map[int]*Tab
@@ -52,6 +63,28 @@ type Client struct {
 
 func New(base string) *Client {
 	return &Client{Base: base, tabs: map[int]*Tab{}, next: 1}
+}
+
+// UseKey generates a device key.
+func (c *Client) UseKey() *Client {
+	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	c.Key = k
+	return c
+}
+
+func (c *Client) PublicKeyB64() string {
+	der, _ := x509.MarshalPKIXPublicKey(&c.Key.PublicKey)
+	return base64.StdEncoding.EncodeToString(der)
+}
+
+// Sign returns an r||s (P1363) signature, base64, like WebCrypto.
+func (c *Client) Sign(msg string) string {
+	h := sha256.Sum256([]byte(msg))
+	r, s, _ := ecdsa.Sign(rand.Reader, c.Key, h[:])
+	sig := make([]byte, 64)
+	r.FillBytes(sig[:32])
+	s.FillBytes(sig[32:])
+	return base64.StdEncoding.EncodeToString(sig)
 }
 
 func (c *Client) AddTab(u, title, text string) int {
@@ -77,7 +110,12 @@ func (c *Client) Commands() []string {
 
 // Pair exchanges a one-time code for a device token.
 func (c *Client) Pair(code, name string) (int, error) {
-	b, _ := json.Marshal(map[string]string{"code": code, "name": name, "profile": "Default"})
+	body := map[string]string{"code": code, "name": name, "profile": "Default"}
+	if c.Key != nil {
+		body["public_key"] = c.PublicKeyB64()
+		body["signature"] = c.Sign("capy-pair|" + strings.ToUpper(code) + "|" + name)
+	}
+	b, _ := json.Marshal(body)
 	resp, err := http.Post(c.Base+"/v1/pair", "application/json", bytes.NewReader(b))
 	if err != nil {
 		return 0, err
@@ -111,9 +149,22 @@ func (c *Client) Connect() error {
 		return err
 	}
 	var r struct {
-		Type string `json:"type"`
+		Type  string `json:"type"`
+		Nonce string `json:"nonce"`
 	}
 	json.Unmarshal(msg, &r)
+	if r.Type == "challenge" && c.Key != nil {
+		pb, _ := json.Marshal(map[string]string{"type": "proof", "sig": c.Sign("capy-auth|" + c.DeviceID + "|" + r.Nonce)})
+		if err := conn.WriteText(pb); err != nil {
+			return err
+		}
+		_, msg, err = conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		r.Type = ""
+		json.Unmarshal(msg, &r)
+	}
 	if r.Type != "ready" {
 		conn.CloseNow()
 		return fmt.Errorf("auth refused: %s", msg)
@@ -238,6 +289,9 @@ func (c *Client) handle(env relay.Envelope) relay.Response {
 		return ok(env.ID, map[string]any{"url": t.URL, "mime_type": "image/png",
 			"data": base64.StdEncoding.EncodeToString([]byte("\x89PNG-fake"))})
 	case "click":
+		if c.LocalConfirm && strings.Contains(sel, "delete") {
+			return ok(env.ID, map[string]any{"url": t.URL, "clicked": sel, "confirmed_by": "owner_on_device"})
+		}
 		if strings.Contains(sel, "delete") && !env.Confirmed {
 			return fail(env.ID, "needs_confirmation", "click on a delete button")
 		}

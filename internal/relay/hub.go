@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -117,6 +118,11 @@ func (h *Hub) Serve(id string, c *ws.Conn, registered, onClose func()) {
 		}
 		var r Response
 		if json.Unmarshal(msg, &r) != nil || r.ID == "" {
+			// app-level keepalive from the extension (a browser cannot see
+			// WebSocket ping frames): answer so it can detect a dead link
+			if bytes.Contains(msg, []byte(`"ping"`)) {
+				d.conn.WriteText([]byte(`{"type":"pong"}`))
+			}
 			continue
 		}
 		d.mu.Lock()

@@ -25,7 +25,10 @@ type Config struct {
 	DeviceTTL      time.Duration // default 90 days
 	RatePerMin     int           // per agent, default 120
 	AllowedOrigins []string      // Origin values accepted on /mcp (default none)
-	Hub            *Hub
+	// RequireDeviceKey refuses to pair a browser without a public key and to
+	// accept a device that has none.
+	RequireDeviceKey bool
+	Hub              *Hub
 }
 
 type Server struct {
@@ -91,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/owner/kill", s.owner(s.handleKill))
 	m.HandleFunc("POST /v1/pair", s.handlePair)
 	m.HandleFunc("GET /v1/device/ws", s.handleDeviceWS)
+	m.HandleFunc("POST /v1/device/unpair", s.handleDeviceUnpair)
 	m.HandleFunc("POST /mcp", s.handleMCP)
 	m.HandleFunc("GET /mcp", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "POST")
@@ -362,6 +366,7 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		Profile   string `json:"profile"`
 		PublicKey string `json:"public_key"`
+		Signature string `json:"signature"` // proof of key possession over the pairing code
 	}
 	if !readBody(w, r, &req, 8192) {
 		return
@@ -370,7 +375,16 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		jerr(w, 400, "bad device fields")
 		return
 	}
-	tenant, ok := s.Store.ConsumeCode(strings.ToUpper(strings.TrimSpace(req.Code)), s.now())
+	code := strings.ToUpper(strings.TrimSpace(req.Code))
+	if req.PublicKey == "" && s.cfg.RequireDeviceKey {
+		jerr(w, 400, "a device public key is required")
+		return
+	}
+	if req.PublicKey != "" && !VerifyDeviceSig(req.PublicKey, pairProofMsg(code, req.Name), req.Signature) {
+		jerr(w, 400, "device key proof is missing or invalid")
+		return
+	}
+	tenant, ok := s.Store.ConsumeCode(code, s.now())
 	if !ok {
 		s.pairFailed(ip)
 		s.Audit.Add(Entry{Time: s.now(), Event: "pair_failed", Detail: ip})
@@ -406,6 +420,14 @@ func (s *Server) handleDeviceWS(w http.ResponseWriter, r *http.Request) {
 		c.Close()
 		return
 	}
+	if dev.PublicKey != "" || s.cfg.RequireDeviceKey {
+		if !s.proveDeviceKey(c, dev) {
+			c.WriteText([]byte(`{"type":"error","code":"unauthorized"}`))
+			c.Close()
+			s.Audit.Add(Entry{Time: s.now(), Tenant: dev.TenantID, Event: "device_key_failed", Device: dev.ID})
+			return
+		}
+	}
 	c.MaxMessage = 8 << 20
 	b, _ := json.Marshal(map[string]string{"type": "ready", "device_id": dev.ID})
 	c.WriteText(b)
@@ -419,6 +441,42 @@ func (s *Server) handleDeviceWS(w http.ResponseWriter, r *http.Request) {
 		s.Store.TouchDevice(dev.ID, s.now())
 		s.Audit.Add(Entry{Time: s.now(), Tenant: dev.TenantID, Event: "device_offline", Device: dev.ID})
 	})
+}
+
+// proveDeviceKey sends a fresh challenge and checks the signature.
+func (s *Server) proveDeviceKey(c *ws.Conn, dev Device) bool {
+	if dev.PublicKey == "" {
+		return false
+	}
+	nb := make([]byte, 16)
+	rand.Read(nb)
+	nonce := hex.EncodeToString(nb)
+	b, _ := json.Marshal(map[string]string{"type": "challenge", "nonce": nonce})
+	if c.WriteText(b) != nil {
+		return false
+	}
+	_, msg, err := c.ReadMessage()
+	var p struct {
+		Type string `json:"type"`
+		Sig  string `json:"sig"`
+	}
+	if err != nil || json.Unmarshal(msg, &p) != nil || p.Type != "proof" {
+		return false
+	}
+	return VerifyDeviceSig(dev.PublicKey, authProofMsg(dev.ID, nonce), p.Sig)
+}
+
+// handleDeviceUnpair lets the extension revoke its own token ("Revoke" in the popup).
+func (s *Server) handleDeviceUnpair(w http.ResponseWriter, r *http.Request) {
+	dev, ok := s.Store.DeviceByToken(bearer(r), s.now())
+	if !ok {
+		jerr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	s.Store.RevokeDevice(dev.TenantID, dev.ID)
+	s.Hub.Kick(dev.ID)
+	s.Audit.Add(Entry{Time: s.now(), Tenant: dev.TenantID, Event: "device_unpaired", Device: dev.ID})
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 // ---------- command execution ----------
@@ -634,6 +692,12 @@ func (s *Server) filterResult(a Agent, cmd string, raw json.RawMessage, ent *Ent
 	}
 	var v map[string]json.RawMessage
 	if json.Unmarshal(raw, &v) == nil {
+		if cb, ok := v["confirmed_by"]; ok { // the extension asked the human itself
+			var who string
+			if json.Unmarshal(cb, &who) == nil && len(who) <= 32 {
+				ent.ConfirmedBy = who
+			}
+		}
 		if ub, ok := v["url"]; ok {
 			var u string
 			json.Unmarshal(ub, &u)

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CapyAgent Browser</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<h1>CapyAgent Browser</h1>
+<div id="statusline"><span id="dot" class="dot"></span><span id="status">...</span></div>
+<div id="detail" class="muted"></div>
+
+<section id="pairBox" hidden>
+  <label>Relay address <input id="relay" placeholder="https://relay.example.com" autocomplete="off"></label>
+  <label>Pairing code <input id="code" placeholder="ABCD2345" autocomplete="off" maxlength="12"></label>
+  <label>Device name <input id="devname" placeholder="Work laptop" autocomplete="off" maxlength="64"></label>
+  <button id="pairBtn" class="primary">Pair this browser</button>
+  <div class="muted">Get a one-time code from the relay owner page. The code works once for five minutes.</div>
+</section>
+
+<section id="pairedBox" hidden>
+  <div class="row"><span class="muted">Device</span><b id="dname"></b></div>
+  <div class="row"><span class="muted">Relay</span><span id="drelay"></span></div>
+  <div class="row"><span class="muted">Token expires</span><span id="dexp"></span></div>
+  <div class="buttons">
+    <button id="pauseBtn">Pause</button>
+    <button id="revokeBtn" class="danger">Revoke</button>
+  </div>
+  <details>
+    <summary>Site access</summary>
+    <div id="siteAccess" class="muted"></div>
+    <button id="grantBtn">Allow access to sites</button>
+    <label>Only these sites, one per line (optional)<textarea id="localAllowed" rows="3" placeholder="example.com"></textarea></label>
+    <label>Never these sites, one per line<textarea id="localDenied" rows="3"></textarea></label>
+    <button id="saveLocal">Save</button>
+    <div class="muted">The agent's own site list comes from the relay. These lists can only narrow it. Banks, mail, sign-in pages and the Chrome Web Store are always blocked.</div>
+  </details>
+  <details>
+    <summary>Trusted agents</summary>
+    <div id="trustList" class="muted"></div>
+    <button id="clearTrust">Forget all trust</button>
+  </details>
+  <details open>
+    <summary>Recent activity</summary>
+    <ul id="activity"></ul>
+  </details>
+</section>
+<div id="msg" class="msg" role="status"></div>
+<script src="popup.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Confirm agent action</title>
+<link rel="stylesheet" href="confirm.css">
+</head>
+<body>
+<h1>An agent wants to do something risky</h1>
+<dl>
+  <dt>Agent</dt><dd id="agent"></dd>
+  <dt>Site</dt><dd id="host"></dd>
+  <dt>Action</dt><dd id="what"></dd>
+</dl>
+<label id="trustRow"><input type="checkbox" id="trust"> Trust this agent on this site for <span id="mins"></span> minutes (not for payments, deletions or uploads)</label>
+<div class="buttons">
+  <button id="deny" class="danger">Deny</button>
+  <button id="allow" class="primary">Allow once</button>
+</div>
+<div class="muted">No answer within 25 seconds counts as Deny.</div>
+<script src="confirm.js" type="module"></script>
+</body>
+</html>

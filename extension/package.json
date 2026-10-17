@@ -1,6 +1,6 @@
 {
   "name": "capy-browser-extension",
-  "version": "0.4.10",
+  "version": "1.4.0",
   "private": false,
   "type": "module",
   "license": "Apache-2.0",

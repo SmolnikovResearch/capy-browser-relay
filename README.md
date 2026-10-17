@@ -1,24 +1,20 @@
 # capy-browser-relay
 
-Local bridge between the CapyAgent Browser extension and an agent on the same computer.
-The extension talks to `127.0.0.1`. The agent calls the same bridge over MCP
-(Streamable HTTP, `Authorization: Bearer`). Claude Code, Codex, Hermes, OpenClaw
-and CapyAgent use that interface.
+Local and remote bridge between the CapyAgent Browser extension and AI agents on the same or remote computer.
+The extension talks to `127.0.0.1` (or outbound TLS to your own server). The agent calls the same bridge over standard MCP
+(Streamable HTTP, `Authorization: Bearer`). Claude Code, Codex, Antigravity, Hermes, OpenClaw
+and CapyAgent use this interface.
 
-If the agent runs on another machine, the same bridge runs on that person's server.
-The extension opens an outbound connection to their address. It does not use a
-shared cloud. `capyagent.com/browser-relay` is only a temporary proxy in front of
-the loopback process on this server. It is not the product.
-
-Product decision, 16 Oct 2026: vault `01 Projects/CapyAgent/Браузер/`.
-Extension 0.4.10. No `debugger` permission. A new tab stays inactive in the
-existing window, in a collapsed group named `agent/session`. The person's own
-tab and another session's tab are refused. Install notes: `extension/USTANOVKA.txt`.
+Features:
+- **Zero-disturbance for human user:** Background tabs remain inactive (`active: false`), audio is automatically muted (`muted: true`), modal alerts/confirms are neutered, and tabs are neatly folded into color-coded collapsed tab groups.
+- **Multi-agent concurrency:** Per-lane execution in Relay allows multiple agents (or multiple sessions) to drive their respective tabs simultaneously without blocking each other.
+- **Universal page engine:** Clean, structured Markdown and text extraction for all websites, deep shadow DOM traversal, React 16+ controlled form input support, and full pointer/mouse event simulation.
+- **Strict security & privacy:** Token hashing, device ECDSA P-256 key challenges, domain allow/deny lists, password input protection (`needs_human`), and device-only confirmation for dangerous actions.
 
 Go 1.22+, standard library only.
 
 ```
-same computer:  extension -> 127.0.0.1 relay <- MCP agent
+same computer:  extension -> 127.0.0.1 relay <- MCP agent (Claude Code, Codex, Antigravity...)
 other computer: extension --outbound--> their relay <- their agent
 ```
 

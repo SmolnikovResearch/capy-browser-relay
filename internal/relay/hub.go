@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -59,6 +60,7 @@ type deviceConn struct {
 	once    sync.Once
 	mu      sync.Mutex
 	pending map[string]chan Response
+	lanes   map[string]chan *job
 }
 
 type Hub struct {
@@ -83,7 +85,7 @@ func (h *Hub) Online(id string) bool {
 // Serve registers the connection and blocks until it closes.
 func (h *Hub) Serve(id string, c *ws.Conn, registered, onClose func()) {
 	d := &deviceConn{id: id, conn: c, queue: make(chan *job, h.QueueSize), done: make(chan struct{}),
-		pending: map[string]chan Response{}}
+		pending: map[string]chan Response{}, lanes: map[string]chan *job{}}
 	c.ReadTimeout = 60 * time.Second
 	h.mu.Lock()
 	if old := h.conns[id]; old != nil {
@@ -161,11 +163,40 @@ func (h *Hub) Kick(id string) {
 	}
 }
 
-// worker runs queued commands one at a time per browser.
+func laneKey(env Envelope) string {
+	if len(env.Args) > 0 {
+		var a struct {
+			TabID   int    `json:"tab_id"`
+			Session string `json:"session"`
+		}
+		if json.Unmarshal(env.Args, &a) == nil {
+			if a.TabID > 0 {
+				return fmt.Sprintf("tab:%d", a.TabID)
+			}
+			if a.Session != "" {
+				return fmt.Sprintf("sess:%s/%s", env.Agent, a.Session)
+			}
+		}
+	}
+	if env.Agent != "" {
+		return fmt.Sprintf("agent:%s", env.Agent)
+	}
+	return "global"
+}
+
+// worker routes queued commands to per-lane workers so different tabs/agents
+// can run in parallel without blocking each other, while calls on the same
+// tab/session stay serialised.
 func (h *Hub) worker(d *deviceConn) {
 	for {
 		select {
 		case <-d.done:
+			d.mu.Lock()
+			for _, q := range d.lanes {
+				close(q)
+			}
+			d.lanes = map[string]chan *job{}
+			d.mu.Unlock()
 			for {
 				select {
 				case j := <-d.queue:
@@ -179,12 +210,72 @@ func (h *Hub) worker(d *deviceConn) {
 				j.resp <- Response{ID: j.env.ID, Error: errExpired}
 				continue
 			}
+			k := laneKey(j.env)
+			d.mu.Lock()
+			lq, ok := d.lanes[k]
+			if !ok {
+				lq = make(chan *job)
+				d.lanes[k] = lq
+				go h.laneWorker(d, k, lq)
+			}
+			d.mu.Unlock()
+			select {
+			case lq <- j:
+			case <-d.done:
+				j.resp <- Response{ID: j.env.ID, Error: errOffline}
+			}
+		}
+	}
+}
+
+func (h *Hub) laneWorker(d *deviceConn, lane string, q chan *job) {
+	idleTimer := time.NewTimer(2 * time.Minute)
+	defer idleTimer.Stop()
+	for {
+		if !idleTimer.Stop() {
+			select {
+			case <-idleTimer.C:
+			default:
+			}
+		}
+		idleTimer.Reset(2 * time.Minute)
+		select {
+		case <-d.done:
+			for {
+				select {
+				case j, ok := <-q:
+					if ok && j != nil {
+						j.resp <- Response{ID: j.env.ID, Error: errOffline}
+					}
+				default:
+					return
+				}
+			}
+		case <-idleTimer.C:
+			d.mu.Lock()
+			if len(q) == 0 {
+				delete(d.lanes, lane)
+				d.mu.Unlock()
+				return
+			}
+			d.mu.Unlock()
+		case j, ok := <-q:
+			if !ok || j == nil {
+				return
+			}
+			if time.Since(j.enq) > h.QueueTTL {
+				j.resp <- Response{ID: j.env.ID, Error: errExpired}
+				continue
+			}
 			ch := make(chan Response, 1)
 			d.mu.Lock()
 			d.pending[j.env.ID] = ch
 			d.mu.Unlock()
 			b, _ := json.Marshal(j.env)
 			if err := d.conn.WriteText(b); err != nil {
+				d.mu.Lock()
+				delete(d.pending, j.env.ID)
+				d.mu.Unlock()
 				d.shutdown()
 				j.resp <- Response{ID: j.env.ID, Error: errOffline}
 				continue

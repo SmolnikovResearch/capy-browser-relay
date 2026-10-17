@@ -56,6 +56,9 @@ export function createCommands(deps) {
       ? { url, active: false }
       : { url, active: false, windowId, index: 10000 });
     try {
+      if (tabs.update) await tabs.update(created.id, { muted: true });
+    } catch { /* muted if supported */ }
+    try {
       if (tabs.group && tabGroups) {
         const title = key.slice(0, 40);
         const found = await tabGroups.query({ windowId: created.windowId || windowId, title });
@@ -383,5 +386,5 @@ export function createCommands(deps) {
     }
   }
 
-  return { handle, forget };
+  return { handle, forget, claim, leases };
 }

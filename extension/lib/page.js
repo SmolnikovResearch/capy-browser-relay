@@ -7,6 +7,16 @@ export function capyPage(op, a) {
   const S = globalThis.__capyRefs || (globalThis.__capyRefs = { map: new Map(), n: 0 });
   const MAX_TEXT = 200000;
 
+  if (!globalThis.__capyGuards) {
+    globalThis.__capyGuards = true;
+    try {
+      window.alert = () => {};
+      window.confirm = () => true;
+      window.prompt = () => null;
+      window.onbeforeunload = null;
+    } catch (e) {}
+  }
+
   function refOf(el) {
     for (const [k, w] of S.map) {
       const v = w.deref();
@@ -78,25 +88,36 @@ export function capyPage(op, a) {
     let nodes = 0;
     function push(s) {
       s = String(s || '').replace(/\s+/g, ' ').trim();
-      if (!s || size >= 6000) return;
-      const bit = s.slice(0, 140);
+      if (!s || size >= 80000) return;
+      const bit = s.slice(0, 300);
       chunks.push(bit);
       size += bit.length + 1;
     }
     function walk(node) {
-      if (!node || nodes > 1200 || size >= 6000 || performance.now() - start > 700) return;
+      if (!node || nodes > 6000 || size >= 80000 || performance.now() - start > 1200) return;
       if (node.nodeType === 3) { push(node.nodeValue); return; }
       if (node.nodeType !== 1 && node.nodeType !== 11) return;
       const name = node.localName || '';
-      if (name === 'script' || name === 'style' || name === 'svg' || name === 'noscript') return;
+      if (name === 'script' || name === 'style' || name === 'svg' || name === 'noscript' || name === 'template') return;
+      if (node.nodeType === 1) {
+        try {
+          const st = getComputedStyle(node);
+          if (st.display === 'none' || st.visibility === 'hidden') return;
+        } catch (e) {}
+      }
       nodes++;
+      if (name === 'h1' || name === 'h2' || name === 'h3' || name === 'h4' || name === 'h5' || name === 'h6') {
+        const hText = (node.innerText || node.textContent || '').trim();
+        if (hText) push('\n### ' + hText.slice(0, 100));
+        return;
+      }
       if (name === 'button' || name === 'ytcp-button' || (node.getAttribute && node.getAttribute('role') === 'button')) {
         push(shortName(node));
       }
       if (node.shadowRoot) walk(node.shadowRoot);
       const kids = node.childNodes;
       if (!kids) return;
-      for (let i = 0; i < kids.length && nodes <= 1200 && size < 6000; i++) walk(kids[i]);
+      for (let i = 0; i < kids.length && nodes <= 6000 && size < 80000; i++) walk(kids[i]);
     }
     walk(root);
     return chunks.join('\n');
@@ -188,12 +209,20 @@ export function capyPage(op, a) {
     };
   }
   function nativeSet(el, value) {
+    const prev = el.value;
     const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
       : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-    setter.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (desc && desc.set) {
+      desc.set.call(el, value);
+    } else {
+      el.value = value;
+    }
+    if (el._valueTracker) {
+      try { el._valueTracker.setValue(prev); } catch (e) {}
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
   }
 
   switch (op) {
@@ -209,10 +238,9 @@ export function capyPage(op, a) {
         const errs = Array.from(dialog.querySelectorAll('[error], .error, [aria-invalid=true], ytcp-error, [has-error], .error-short, .error-message, ytcp-badge[type=ERROR]')).map(e => (e.className || e.tagName) + ': ' + e.innerText.trim());
         diag = '\n--- DIAG ---\nradios: ' + radios.join(', ') + '\n' + doneState + '\nerrors: ' + errs.join(' | ');
       }
-      const text = dialog
-        ? (collectText(dialog) + diag)
-        : [document.title || '', plaque].filter(Boolean).join('\n');
-      return { url: location.href, title: document.title, text: text, truncated: false };
+      const pageText = collectText(dialog || document.body || document.documentElement);
+      const text = [document.title ? ('# ' + document.title) : '', plaque, pageText, diag].filter(Boolean).join('\n\n');
+      return { url: location.href, title: document.title, text: text, truncated: text.length >= 80000 };
     }
     case 'snapshot': {
       const root = uploadDialog() || document.body || document.documentElement;
@@ -220,22 +248,29 @@ export function capyPage(op, a) {
       const start = performance.now();
       let seen = 0;
       function consider(el) {
-        if (out.length >= 80 || seen > 2000 || performance.now() - start > 1500) return;
+        if (out.length >= 250 || seen > 4000 || performance.now() - start > 1500) return;
         seen++;
         const tag = el.localName || '';
         const role = el.getAttribute && el.getAttribute('role');
-        const interesting = tag === 'button' || tag === 'a' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'ytcp-button' || role === 'button' || role === 'textbox' || role === 'menuitem' || role === 'tab';
+        const interesting = tag === 'button' || tag === 'a' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'ytcp-button' || role === 'button' || role === 'textbox' || role === 'menuitem' || role === 'tab' || role === 'link' || role === 'checkbox' || role === 'radio' || role === 'combobox';
         if (!interesting) return;
         const it = { ref: refOf(el), role: roleOf(el), name: shortName(el) };
         const ty = (el.type || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea' || tag === 'select') {
           it.type = ty || tag;
           if (ty === 'password') it.secret = true;
+          if (el.value && ty !== 'password') it.value = String(el.value).slice(0, 100);
+        }
+        if (tag === 'a' && el.href) it.href = String(el.href).slice(0, 200);
+        if (el.disabled || el.getAttribute('aria-disabled') === 'true') it.disabled = true;
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          it.rect = { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) };
         }
         out.push(it);
       }
       function walk(node) {
-        if (!node || out.length >= 80 || performance.now() - start > 1500) return;
+        if (!node || out.length >= 250 || performance.now() - start > 1500) return;
         if (node.nodeType === 1) {
           consider(node);
           if (node.shadowRoot) walk(node.shadowRoot);
@@ -259,13 +294,23 @@ export function capyPage(op, a) {
     case 'click': {
       const f = find(a);
       if (f.error) return { error: f.error };
+      try { f.el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); } catch (e) {}
       const box = f.el.getBoundingClientRect();
       const ring = document.createElement('div');
       ring.style.cssText = 'position:fixed;left:' + (box.left + box.width / 2 - 14) + 'px;top:' + (box.top + box.height / 2 - 14) + 'px;width:28px;height:28px;border:3px solid #1d5f58;border-radius:50%;pointer-events:none;z-index:2147483644;animation:capy-agent-click .45s ease-out forwards';
       (document.documentElement || document.body).appendChild(ring);
       setTimeout(() => ring.remove(), 500);
+      const cx = box.left + box.width / 2;
+      const cy = box.top + box.height / 2;
+      const mOpts = { bubbles: true, cancelable: true, composed: true, view: window, clientX: cx, clientY: cy };
+      try {
+        f.el.dispatchEvent(new PointerEvent('pointerdown', mOpts));
+        f.el.dispatchEvent(new MouseEvent('mousedown', mOpts));
+        f.el.dispatchEvent(new PointerEvent('pointerup', mOpts));
+        f.el.dispatchEvent(new MouseEvent('mouseup', mOpts));
+      } catch (e) {}
       f.el.click();
-      return { clicked: true, x: box.left + box.width / 2, y: box.top + box.height / 2, w: box.width, h: box.height };
+      return { clicked: true, x: cx, y: cy, w: box.width, h: box.height };
     }
     case 'type': {
       const f = find(a);
@@ -274,9 +319,16 @@ export function capyPage(op, a) {
       if (typeof el.setSelectionRange === 'function') {
         try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* not a text field */ }
       }
+      try {
+        el.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: a.text }));
+      } catch (e) {}
       if (!document.execCommand('insertText', false, a.text)) {
-        if (el.isContentEditable) el.textContent += a.text;
-        else nativeSet(el, (el.value || '') + a.text);
+        if (el.isContentEditable) {
+          el.textContent += a.text;
+          el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        } else {
+          nativeSet(el, (el.value || '') + a.text);
+        }
       }
       return { typed: true };
     }

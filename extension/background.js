@@ -203,6 +203,38 @@ const commands = createCommands({
 });
 chrome.tabs.onRemoved.addListener((id) => { commands.forget(id); });
 
+// Child tab adoption: links clicked with target="_blank" in an agent's tab
+// automatically join the same session group, stay inactive, and are muted.
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (tab.openerTabId) {
+    try {
+      const leases = (await chrome.storage.local.get('tabLeases')).tabLeases || {};
+      const parentKey = leases[String(tab.openerTabId)] || leases[tab.openerTabId];
+      if (parentKey) {
+        leases[String(tab.id)] = parentKey;
+        await chrome.storage.local.set({ tabLeases: leases });
+        await chrome.tabs.update(tab.id, { active: false, muted: true }).catch(() => {});
+        const parentTab = await chrome.tabs.get(tab.openerTabId).catch(() => null);
+        if (parentTab && parentTab.groupId && parentTab.groupId > 0) {
+          await chrome.tabs.group({ tabIds: [tab.id], groupId: parentTab.groupId }).catch(() => {});
+        }
+      }
+    } catch { /* ignore */ }
+  }
+});
+
+// Sound isolation: if an agent tab starts playing audio dynamically, mute it.
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.audible) {
+    try {
+      const leases = (await chrome.storage.local.get('tabLeases')).tabLeases || {};
+      if (leases[String(tabId)] || leases[tabId]) {
+        await chrome.tabs.update(tabId, { muted: true }).catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }
+});
+
 // ---------- client ----------
 const BADGE = {
   connected: ['ON', '#2e7d32'],

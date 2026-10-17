@@ -296,3 +296,13 @@ test('two sessions of one agent do not share tabs', async () => {
   err(await cmds.handle(env('navigate', { tab_id: b, url: 'https://example.com/nope', session: 'chat-a' })), 'tab_in_use');
   assert.equal(br.tabs.get(1).url, 'https://www.youtube.com/keep');
 });
+
+test('tabs_open automatically mutes tab and isolates sound', async () => {
+  const br = fakeBrowser(['https://www.youtube.com/keep']);
+  const { cmds } = makeCommands(br);
+  const a = ok(await cmds.handle(env('tabs_open', { url: 'https://example.com/noisy', session: 'music' }))).tab_id;
+  assert.equal(br.tabs.get(a).active, false);
+  assert.equal(br.tabs.get(a).muted, true);
+  assert.equal(br.tabs.get(1).muted, undefined);
+});
+

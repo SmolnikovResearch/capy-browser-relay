@@ -1,5 +1,9 @@
 # capy-browser-relay
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
+[![Manifest](https://img.shields.io/badge/Chrome_Extension-MV3-orange.svg)](extension/manifest.json)
+
 Local and remote bridge between the CapyAgent Browser extension and AI agents on the same or remote computer.
 The extension talks to `127.0.0.1` (or outbound TLS to your own server). The agent calls the same bridge over standard MCP
 (Streamable HTTP, `Authorization: Bearer`). Claude Code, Codex, Antigravity, Hermes, OpenClaw
@@ -167,3 +171,7 @@ CapyAgent extension is a side panel for the local core on 127.0.0.1 with no rela
 Load unpacked: `chrome://extensions`, Developer mode, Load unpacked, pick `extension/`. Not published; no store listing.
 
 Tests: `cd extension && node --test test/*.test.mjs` (policy, danger rules, command logic with a fake browser, and the real client against the real relay built from this repo). Live Chrome: `e2e/live-chrome.mjs` (throwaway profile, loopback relay, loads the extension over CDP `Extensions.loadUnpacked`, which Chrome 154 allows with `--enable-unsafe-extension-debugging`; `--load-extension` no longer works in branded Chrome). Run on 2026-10-13 on the old laptop, Chrome 154: 26 of 27 checks passed; the 27th (Claude Code reading the page) needs a logged-in Claude Code on that machine.
+
+## License
+
+This project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.

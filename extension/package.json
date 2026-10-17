@@ -1,1 +1,10 @@
-{ "name": "capy-browser-extension", "private": true, "type": "module", "scripts": { "test": "node --test test/*.test.mjs" } }
+{
+  "name": "capy-browser-extension",
+  "version": "0.4.10",
+  "private": false,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

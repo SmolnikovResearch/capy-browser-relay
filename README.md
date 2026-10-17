@@ -39,7 +39,7 @@ exposing it (WSS and HTTPS only; not done in slice 1). Without
 ```
 A=http://127.0.0.1:8787
 # 1. admin creates a tenant (account); the owner token is shown once
-curl -XPOST $A/admin/tenants -H 'Authorization: Bearer change-me' -d '{"name":"kirill"}'
+curl -XPOST $A/admin/tenants -H 'Authorization: Bearer change-me' -d '{"name":"default"}'
 # 2. owner gets a one-time pairing code (8 chars, 5 min, single use)
 curl -XPOST $A/v1/owner/pair-codes -H "Authorization: Bearer $OWNER"
 # 3. the extension (or ./cmd/fakeext) pairs and connects

@@ -1,51 +1,88 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>CapyAgent Browser</title>
+<title>CapyAgent</title>
 <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-<h1>CapyAgent Browser</h1>
-<div id="statusline"><span id="dot" class="dot"></span><span id="status">...</span></div>
-<div id="detail" class="muted"></div>
+<div class="shell">
+  <header class="bar" id="bar">
+    <img class="mark" src="icons/icon-48.png" alt="">
+    <div class="bar-text">
+      <h1>CapyAgent</h1>
+      <p class="statusline"><span id="dot" class="dot"></span><span id="status">Проверяю</span></p>
+    </div>
+    <button id="settingsBtn" class="icon-btn" type="button" aria-label="Настройки">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8h17M3.5 16h17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="15" cy="8" r="2.5" fill="var(--canvas)" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="16" r="2.5" fill="var(--canvas)" stroke="currentColor" stroke-width="1.6"/></svg>
+    </button>
+  </header>
 
-<section id="pairBox" hidden>
-  <label>Relay address <input id="relay" placeholder="https://relay.example.com" autocomplete="off"></label>
-  <label>Pairing code <input id="code" placeholder="ABCD2345" autocomplete="off" maxlength="12"></label>
-  <label>Device name <input id="devname" placeholder="Work laptop" autocomplete="off" maxlength="64"></label>
-  <button id="pairBtn" class="primary">Pair this browser</button>
-  <div class="muted">Get a one-time code from the relay owner page. The code works once for five minutes.</div>
-</section>
+  <p id="detail" class="detail" hidden></p>
 
-<section id="pairedBox" hidden>
-  <div class="row"><span class="muted">Device</span><b id="dname"></b></div>
-  <div class="row"><span class="muted">Relay</span><span id="drelay"></span></div>
-  <div class="row"><span class="muted">Token expires</span><span id="dexp"></span></div>
-  <div class="buttons">
-    <button id="pauseBtn">Pause</button>
-    <button id="revokeBtn" class="danger">Revoke</button>
-  </div>
-  <details>
-    <summary>Site access</summary>
-    <div id="siteAccess" class="muted"></div>
-    <button id="grantBtn">Allow access to sites</button>
-    <label>Only these sites, one per line (optional)<textarea id="localAllowed" rows="3" placeholder="example.com"></textarea></label>
-    <label>Never these sites, one per line<textarea id="localDenied" rows="3"></textarea></label>
-    <button id="saveLocal">Save</button>
-    <div class="muted">The agent's own site list comes from the relay. These lists can only narrow it. Banks, mail, sign-in pages and the Chrome Web Store are always blocked.</div>
-  </details>
-  <details>
-    <summary>Trusted agents</summary>
-    <div id="trustList" class="muted"></div>
-    <button id="clearTrust">Forget all trust</button>
-  </details>
-  <details open>
-    <summary>Recent activity</summary>
-    <ul id="activity"></ul>
-  </details>
-</section>
-<div id="msg" class="msg" role="status"></div>
+  <section id="home">
+    <div id="pairedHome" hidden>
+      <p class="device" id="dname"></p>
+      <section class="sheet">
+        <h2>Сделано</h2>
+        <ul id="activity"></ul>
+        <p id="emptyAct" class="empty">Пока ничего не делали.</p>
+      </section>
+    </div>
+    <div id="unpairedHome">
+      <section class="sheet">
+        <p class="empty">Этот браузер ещё не подключён.</p>
+        <button id="openConnect" class="primary" type="button">Подключить</button>
+      </section>
+    </div>
+  </section>
+
+  <section id="settings" hidden>
+    <div class="settings-head">
+      <button id="backBtn" class="icon-btn" type="button" aria-label="Назад">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5 9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h1>Настройки</h1>
+    </div>
+
+    <section id="pairBox" class="group">
+      <h2>Подключение</h2>
+      <label>Адрес<input id="relay" placeholder="https://relay.example.com" autocomplete="off" spellcheck="false"></label>
+      <label>Одноразовый код<input id="code" placeholder="ABCD2345" autocomplete="off" maxlength="12" spellcheck="false"></label>
+      <label>Имя этого браузера<input id="devname" placeholder="MacBook" autocomplete="off" maxlength="64"></label>
+      <button id="pairBtn" class="primary" type="button">Подключить</button>
+      <p class="hint">Код даёт тот, кто держит релей. Он сгорает через пять минут.</p>
+    </section>
+
+    <section id="pairedBox" hidden>
+      <section class="group">
+        <h2>Подключение</h2>
+        <p class="relay" id="drelay"></p>
+        <div class="buttons">
+          <button id="pauseBtn" type="button">Пауза</button>
+          <button id="revokeBtn" class="danger" type="button">Отключить</button>
+        </div>
+      </section>
+
+      <section class="group">
+        <h2>Сайты</h2>
+        <p id="siteAccess" class="hint"></p>
+        <button id="grantBtn" class="primary" type="button">Разрешить сайты</button>
+        <label>Только эти<textarea id="localAllowed" rows="3" placeholder="example.com" spellcheck="false"></textarea></label>
+        <label>Никогда<textarea id="localDenied" rows="3" placeholder="bank.example" spellcheck="false"></textarea></label>
+        <button id="saveLocal" type="button">Сохранить списки</button>
+        <p class="hint">Банки, почта, вход и магазин Chrome закрыты всегда. Свой список может только сузить доступ.</p>
+      </section>
+
+      <section class="group">
+        <h2>Без вопроса</h2>
+        <p id="trustList" class="hint"></p>
+        <button id="clearTrust" type="button">Спрашивать снова</button>
+      </section>
+    </section>
+    <p id="msg" class="msg" role="status"></p>
+  </section>
+</div>
 <script src="popup.js" type="module"></script>
 </body>
 </html>

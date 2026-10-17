@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>CapyAgent</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <img class="mark" src="icons/icon-48.png" alt="">
+    <div class="bar-text">
+      <h1>CapyAgent</h1>
+      <p class="statusline"><span id="dot" class="dot"></span><span id="status"></span></p>
+    </div>
+    <button id="langBtn" class="text-btn" type="button">EN</button>
+    <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="15" cy="8" r="2.4" fill="var(--fon)" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="16" r="2.4" fill="var(--fon)" stroke="currentColor" stroke-width="1.6"/></svg>
+    </button>
+  </header>
+
+  <main id="home" class="stage">
+    <p id="detail" class="detail" hidden></p>
+    <div id="thread" class="thread"></div>
+    <p id="empty" class="empty"></p>
+    <form id="dock" class="dock">
+      <div class="composer">
+        <textarea id="ask" rows="1"></textarea>
+        <button id="send" class="send" type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17V7M7.5 11.5 12 7l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <p id="fine" class="fine"></p>
+    </form>
+  </main>
+
+  <section id="settings" class="stage settings" hidden>
+    <div class="set-head">
+      <button id="backBtn" class="icon-btn" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5 9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h1 id="setTitle"></h1>
+    </div>
+    <div class="set-body">
+      <section id="pairBox" class="group">
+        <h2 id="pairTitle"></h2>
+        <label id="labRelay"><span></span><input id="relay" autocomplete="off" spellcheck="false"></label>
+        <label id="labCode"><span></span><input id="code" autocomplete="off" maxlength="12" spellcheck="false"></label>
+        <label id="labName"><span></span><input id="devname" autocomplete="off" maxlength="64"></label>
+        <button id="pairBtn" class="primary" type="button"></button>
+        <p id="pairHint" class="hint"></p>
+      </section>
+      <section id="pairedBox" hidden>
+        <section class="group">
+          <h2 id="connTitle"></h2>
+          <p class="relay" id="drelay"></p>
+          <div class="buttons">
+            <button id="pauseBtn" type="button"></button>
+            <button id="revokeBtn" class="danger" type="button"></button>
+          </div>
+        </section>
+        <section class="group">
+          <h2 id="sitesTitle"></h2>
+          <p id="siteAccess" class="hint"></p>
+          <button id="grantBtn" class="primary" type="button"></button>
+          <label id="labAllow"><span></span><textarea id="localAllowed" rows="3" spellcheck="false"></textarea></label>
+          <label id="labDeny"><span></span><textarea id="localDenied" rows="3" spellcheck="false"></textarea></label>
+          <button id="saveLocal" type="button"></button>
+          <p id="siteHint" class="hint"></p>
+        </section>
+        <section class="group">
+          <h2 id="trustTitle"></h2>
+          <p id="trustList" class="hint"></p>
+          <button id="clearTrust" type="button"></button>
+        </section>
+      </section>
+      <p id="msg" class="msg" role="status"></p>
+    </div>
+  </section>
+</div>
+<script src="panel.js" type="module"></script>
+</body>
+</html>

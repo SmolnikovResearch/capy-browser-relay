@@ -108,28 +108,36 @@ test('extension client against the real relay', { skip: !haveGo, timeout: 90000 
   assert.equal(JSON.stringify(devs).includes('node laptop'), true);
 
   const call = mcp(base, agent);
-  // read
-  let r = await call('browser_tabs_list', {});
-  assert.match(textOf(r), /example\.com\/page/);
+  // the user's already-open tabs are not listed and cannot be driven
+  let r = await call('browser_tabs_list', { session: 'it' });
+  assert.doesNotMatch(textOf(r), /example\.com\/page/);
   assert.doesNotMatch(textOf(r), /evil\.test/);
-  r = await call('browser_read_page', { tab_id: 1 });
+  r = await call('browser_tabs_open', { url: 'https://example.com/owned', session: 'it' });
+  assert.equal(r.isError, false, textOf(r));
+  const tabId = JSON.parse(textOf(r)).tab_id;
+  br.pages.set(tabId, br.pages.get(1));
+  r = await call('browser_tabs_list', { session: 'it' });
+  assert.match(textOf(r), /example\.com\/owned/);
+  r = await call('browser_read_page', { tab_id: tabId, session: 'it' });
   assert.match(textOf(r), /PAGE TEXT/);
-  r = await call('browser_read_page', { tab_id: 2 });
+  r = await call('browser_read_page', { tab_id: 1, session: 'it' });
+  assert.equal(r.isError, true);
+  r = await call('browser_read_page', { tab_id: tabId, session: 'other' });
   assert.equal(r.isError, true);
   // form
-  r = await call('browser_form_input', { tab_id: 1, selector: '#q', value: 'hello' });
+  r = await call('browser_form_input', { tab_id: tabId, selector: '#q', value: 'hello', session: 'it' });
   assert.equal(r.isError, false, textOf(r));
-  assert.equal(br.pages.get(1).filled.value, 'hello');
-  r = await call('browser_type', { tab_id: 1, selector: '#pw', text: 'hunter2' });
+  assert.equal(br.pages.get(tabId).filled.value, 'hello');
+  r = await call('browser_type', { tab_id: tabId, selector: '#pw', text: 'hunter2', session: 'it' });
   assert.equal(r.isError, true);
   assert.match(textOf(r), /needs_human/);
   // dangerous click: declined, then approved on the device; audit shows who
-  r = await call('browser_click', { tab_id: 1, selector: '#del' });
+  r = await call('browser_click', { tab_id: tabId, selector: '#del', session: 'it' });
   assert.equal(r.isError, true);
   assert.match(textOf(r), /owner_declined/);
-  assert.equal(br.pages.get(1).clicked, undefined);
+  assert.equal(br.pages.get(tabId).clicked, undefined);
   answer = { approved: true };
-  r = await call('browser_click', { tab_id: 1, selector: '#del' });
+  r = await call('browser_click', { tab_id: tabId, selector: '#del', session: 'it' });
   assert.equal(r.isError, false, textOf(r));
   const audit = JSON.stringify((await A('GET', '/v1/owner/audit', owner)).json);
   assert.match(audit, /"confirmed_by":"owner_on_device"/);
@@ -157,7 +165,7 @@ test('extension client against the real relay', { skip: !haveGo, timeout: 90000 
   ({ p } = await startRelay(port, join(tmp, 'data'), bin));
   t.after(() => p.kill());
   assert.ok(await until(() => client.state().status === 'connected', 15000), 'reconnected ' + JSON.stringify(client.state()));
-  r = await call('browser_read_page', { tab_id: 1 });
+  r = await call('browser_read_page', { tab_id: tabId, session: 'it' });
   assert.match(textOf(r), /PAGE TEXT/);
 
   // pause closes the link; resume restores it

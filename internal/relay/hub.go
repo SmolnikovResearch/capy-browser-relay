@@ -189,10 +189,14 @@ func (h *Hub) worker(d *deviceConn) {
 				j.resp <- Response{ID: j.env.ID, Error: errOffline}
 				continue
 			}
+			wait := h.CmdTimeout
+			if j.env.Cmd == "set_file" {
+				wait = 3 * time.Minute
+			}
 			select {
 			case r := <-ch:
 				j.resp <- r
-			case <-time.After(h.CmdTimeout):
+			case <-time.After(wait):
 				d.mu.Lock()
 				delete(d.pending, j.env.ID)
 				d.mu.Unlock()

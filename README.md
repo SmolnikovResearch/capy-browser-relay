@@ -1,15 +1,25 @@
 # capy-browser-relay
 
-Relay between a browser extension (on a laptop) and AI agents (on servers).
-The extension opens an outbound WSS connection; agents reach the same relay
-over standard MCP (Streamable HTTP, `Authorization: Bearer <agent token>`).
-Any MCP client works: Claude Code, Codex, Hermes, OpenClaw, CapyAgent.
+Local bridge between the CapyAgent Browser extension and an agent on the same computer.
+The extension talks to `127.0.0.1`. The agent calls the same bridge over MCP
+(Streamable HTTP, `Authorization: Bearer`). Claude Code, Codex, Hermes, OpenClaw
+and CapyAgent use that interface.
 
-Status: slice 1 (relay + MCP + fake extension) and slice 2 (MV3 extension "CapyAgent Browser" in `extension/`, device key binding) are done and tested; deploy, TLS and store listing are not.
-Go 1.22+, standard library only. Plan: `01 Projects/CapyAgent/Единое расширение для браузера - план.md` in the vault.
+If the agent runs on another machine, the same bridge runs on that person's server.
+The extension opens an outbound connection to their address. It does not use a
+shared cloud. `capyagent.com/browser-relay` is only a temporary proxy in front of
+the loopback process on this server. It is not the product.
+
+Product decision, 16 Oct 2026: vault `01 Projects/CapyAgent/Браузер/`.
+Extension 0.4.10. No `debugger` permission. A new tab stays inactive in the
+existing window, in a collapsed group named `agent/session`. The person's own
+tab and another session's tab are refused. Install notes: `extension/USTANOVKA.txt`.
+
+Go 1.22+, standard library only.
 
 ```
-extension (laptop) --outbound WSS--> relay <--MCP/HTTP, Bearer-- agents (servers)
+same computer:  extension -> 127.0.0.1 relay <- MCP agent
+other computer: extension --outbound--> their relay <- their agent
 ```
 
 ## Run (local only)
@@ -147,12 +157,12 @@ Browser end-to-end tests belong to slice 2 and run on the old laptop.
 
 ## Extension (slice 2)
 
-`extension/`: MV3, service worker, no build step. Name "CapyAgent Browser", version 0.2.0. A fresh extension: the published
+`extension/`: MV3, service worker, no build step. Name "CapyAgent Browser", version 0.4.10. A fresh extension: the published
 CapyAgent extension is a side panel for the local core on 127.0.0.1 with no relay client, so only its icons were reused.
 
 - Pairing: popup, relay address + one-time code + device name. https required except for localhost. Device token in `chrome.storage.local`, key in IndexedDB.
 - Link: WSS, first-message auth, key proof, reconnect with backoff 1-30 s (timers while the worker lives, `chrome.alarms` every 30 s to wake it), app-level ping/pong so a dead link is noticed within about 55 s.
-- Commands: `tabs_list`, `tabs_open`, `navigate`, `read_page` (text, snapshot with refs), `screenshot`, `click`, `type`, `form_input`. Uses `tabs`, `scripting`, `alarms`, `storage`; site access (`<all_urls>`) is an optional permission requested from the popup. No `debugger` yet (file upload, console, network are slice 6).
+- Commands: `tabs_list`, `tabs_open`, `navigate`, `read_page` (text, snapshot with refs), `screenshot`, `click`, `type`, `form_input`, `set_file`. Uses `storage`, `tabs`, `tabGroups`, `scripting`, `alarms`, `sidePanel`. No `debugger` and no `downloads`. `set_file` fetches a blob from `127.0.0.1:18791` and builds the file in the page. Click does not attach a debugger.
 - Local policy: built-in deny floor (banks, mail, sign-in, Chrome Web Store, non-http), the relay's `allowed_domains` and `denied_hosts`, plus the owner's own narrowing lists. Pages are re-checked after every action; nothing from a page outside the list is returned.
 - Dangerous actions (payment, delete, form POST/send, download, file chooser): the extension opens its own window and waits for the human (25 s, then Deny). `confirmed` from the relay is ignored. "Trust this agent here for 15 min" skips the window for submit/download only, never for payment, delete, upload. The audit records `owner_on_device`.
 - Passwords: password, one-time-code, card fields and any field in a form that holds a password input return `needs_human`; nothing is typed.

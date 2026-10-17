@@ -28,16 +28,16 @@ const DOWNLOAD_EXT = /\.(zip|rar|7z|exe|msi|dmg|pkg|apk|iso|deb|rpm|sh|bat|ps1|j
 export function classifyClick(d) {
   if (!d) return null;
   const text = [d.text, d.ariaLabel, d.value, d.title].filter(Boolean).join(' ').slice(0, 300);
-  if (String(d.type).toLowerCase() === 'file') return { kind: 'upload', reason: 'opens a file chooser' };
+  if (String(d.type).toLowerCase() === 'file') return { kind: 'upload', reason: 'откроет выбор файла' };
   const isLink = String(d.tag).toLowerCase() === 'a' && !d.isSubmit; // "Payment methods" in a menu is not a payment
-  if (!isLink && PAY_RE.test(text)) return { kind: 'payment', reason: 'looks like a payment or order button: "' + clip(text) + '"' };
-  if (!isLink && DELETE_RE.test(text)) return { kind: 'delete', reason: 'looks like a delete button: "' + clip(text) + '"' };
-  if (d.download || (d.href && DOWNLOAD_EXT.test(d.href))) return { kind: 'download', reason: 'starts a file download' };
+  if (!isLink && PAY_RE.test(text)) return { kind: 'payment', reason: 'похоже на оплату или заказ: «' + clip(text) + '»' };
+  if (!isLink && DELETE_RE.test(text)) return { kind: 'delete', reason: 'похоже на удаление: «' + clip(text) + '»' };
+  if (d.download || (d.href && DOWNLOAD_EXT.test(d.href))) return { kind: 'download', reason: 'скачает файл' };
   const isSubmit = d.isSubmit;
   if (isSubmit && String(d.formMethod).toLowerCase() === 'post') {
-    return { kind: 'submit', reason: 'submits a form (POST)' + (text ? ': "' + clip(text) + '"' : '') };
+    return { kind: 'submit', reason: 'отправит форму' + (text ? ': «' + clip(text) + '»' : '') };
   }
-  if (isSubmit && SEND_RE.test(text)) return { kind: 'submit', reason: 'submits a form: "' + clip(text) + '"' };
+  if (isSubmit && SEND_RE.test(text)) return { kind: 'submit', reason: 'отправит форму: «' + clip(text) + '»' };
   return null;
 }
 

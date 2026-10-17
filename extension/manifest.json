@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CapyAgent Browser",
   "short_name": "CapyAgent Browser",
-  "version": "0.2.0",
+  "version": "0.4.10",
   "description": "Lets AI agents you approve (Claude Code, Codex, Hermes, OpenClaw, CapyAgent) work in this browser through your relay. You choose the sites, you confirm dangerous actions.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -11,11 +11,12 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "tabs", "scripting", "alarms"],
+  "permissions": ["storage", "tabs", "tabGroups", "scripting", "alarms", "sidePanel"],
+  "host_permissions": ["<all_urls>"],
   "optional_host_permissions": ["<all_urls>"],
+  "side_panel": { "default_path": "panel.html" },
   "action": {
-    "default_title": "CapyAgent Browser",
-    "default_popup": "popup.html",
+    "default_title": "CapyAgent",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

@@ -35,6 +35,9 @@ test('local allowlist only narrows', () => {
 });
 test('hostMatches handles wildcard prefix and empties', () => {
   assert.equal(hostMatches('a.b.com', '*.b.com'), true);
+  assert.equal(hostMatches('a.com', '*'), true);
+  assert.equal(isAllowed('https://example.com/', { allowed: ['*'] }), true);
+  assert.equal(isAllowed('https://online.sberbank.ru/', { allowed: ['*'] }), false);
   assert.equal(hostMatches('a.com', ''), false);
   assert.equal(isDenied('not a url'), true);
 });

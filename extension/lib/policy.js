@@ -20,6 +20,7 @@ export function parseHttpUrl(raw) {
 
 export function hostMatches(host, pattern) {
   let p = String(pattern || '').trim().toLowerCase();
+  if (p === '*') return true;
   if (p.startsWith('*.')) p = p.slice(2);
   if (!p) return false;
   return host === p || host.endsWith('.' + p);

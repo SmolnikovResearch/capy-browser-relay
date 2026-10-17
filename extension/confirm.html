@@ -1,23 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Confirm agent action</title>
+<title>Подтверждение</title>
 <link rel="stylesheet" href="confirm.css">
 </head>
 <body>
-<h1>An agent wants to do something risky</h1>
-<dl>
-  <dt>Agent</dt><dd id="agent"></dd>
-  <dt>Site</dt><dd id="host"></dd>
-  <dt>Action</dt><dd id="what"></dd>
-</dl>
-<label id="trustRow"><input type="checkbox" id="trust"> Trust this agent on this site for <span id="mins"></span> minutes (not for payments, deletions or uploads)</label>
-<div class="buttons">
-  <button id="deny" class="danger">Deny</button>
-  <button id="allow" class="primary">Allow once</button>
-</div>
-<div class="muted">No answer within 25 seconds counts as Deny.</div>
+<main>
+  <p class="eyebrow">Нужно решение</p>
+  <h1>Агент хочет сделать это в браузере</h1>
+  <p class="who"><span id="agent"></span><span class="sep">·</span><span id="host"></span></p>
+  <p id="what" class="what"></p>
+  <label id="trustRow"><input type="checkbox" id="trust"><span>Больше не спрашивать на этом сайте <span id="mins"></span> минут. Оплату, удаление и файлы это не включает.</span></label>
+  <div class="buttons">
+    <button id="deny" type="button">Отклонить</button>
+    <button id="allow" class="primary" type="button">Разрешить</button>
+  </div>
+  <p class="hint">Если не ответить за 25 секунд, действие не выполнится.</p>
+</main>
 <script src="confirm.js" type="module"></script>
 </body>
 </html>

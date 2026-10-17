@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ type Server struct {
 	Store *Store
 	Audit *Audit
 	Hub   *Hub
+	blobs *blobStore
 	// NewAdminToken is set when a token was generated at first start.
 	NewAdminToken string
 
@@ -71,7 +73,11 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: cfg, Store: st, Audit: au, Hub: cfg.Hub, rate: map[string][]time.Time{}, pairBad: map[string][]time.Time{}}
+	blobDir := cfg.DataDir
+	if blobDir == "" {
+		blobDir = os.TempDir()
+	}
+	s := &Server{cfg: cfg, Store: st, Audit: au, Hub: cfg.Hub, blobs: newBlobStore(blobDir), rate: map[string][]time.Time{}, pairBad: map[string][]time.Time{}}
 	if cfg.AdminToken == "" && st.AdminHash() == "" {
 		b := make([]byte, 32)
 		rand.Read(b)
@@ -95,6 +101,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /v1/pair", s.handlePair)
 	m.HandleFunc("GET /v1/device/ws", s.handleDeviceWS)
 	m.HandleFunc("POST /v1/device/unpair", s.handleDeviceUnpair)
+	m.HandleFunc("POST /v1/agent/blobs", s.handleBlobPut)
+	m.HandleFunc("GET /v1/blob/{id}", s.handleBlobGet)
 	m.HandleFunc("POST /mcp", s.handleMCP)
 	m.HandleFunc("GET /mcp", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "POST")
@@ -226,6 +234,9 @@ func (s *Server) handleRevokeDevice(w http.ResponseWriter, r *http.Request, t Te
 }
 
 func validDomainPattern(p string) bool {
+	if strings.TrimSpace(p) == "*" {
+		return true
+	}
 	p = strings.TrimPrefix(p, "*.")
 	if p == "" || len(p) > 253 || !strings.Contains(p, ".") {
 		return false

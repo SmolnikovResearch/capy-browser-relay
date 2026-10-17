@@ -14,7 +14,8 @@ export function normalizeRelay(raw) {
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) {
     throw new Error('relay must be https (plain http only for localhost)');
   }
-  return u.origin;
+  const path = u.pathname.replace(/\/+$/, '');
+  return u.origin + (path && path !== '/' ? path : '');
 }
 
 export function wsUrl(relay) {

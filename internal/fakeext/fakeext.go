@@ -296,6 +296,8 @@ func (c *Client) handle(env relay.Envelope) relay.Response {
 			return fail(env.ID, "needs_confirmation", "click on a delete button")
 		}
 		return ok(env.ID, map[string]any{"url": t.URL, "clicked": sel})
+	case "set_file":
+		return ok(env.ID, map[string]any{"tab_id": t.ID, "attached": "video.mp4", "bytes": 0})
 	case "type", "form_input":
 		if strings.Contains(sel, "password") {
 			return fail(env.ID, "needs_human", "password fields are filled by the owner")

@@ -24,6 +24,8 @@ var cmdScope = map[string]string{
 	"click":       ScopeAct,
 	"type":        ScopeAct,
 	"form_input":  ScopeAct,
+	"activate":    ScopeAct,
+	"set_file":    ScopeAct, // browser_set_file: blob already stored by the agent, tab stays inactive
 	"file_upload": ScopeUpload, // not exposed over MCP in slice 1, kept for the contract
 }
 
@@ -47,7 +49,11 @@ func hostOf(raw string) (host, path string, ok bool) {
 }
 
 func hostMatches(host, pattern string) bool {
-	pattern = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(pattern), "*."))
+	pattern = strings.ToLower(strings.TrimSpace(pattern))
+	if pattern == "*" {
+		return true
+	}
+	pattern = strings.TrimPrefix(pattern, "*.")
 	if pattern == "" {
 		return false
 	}

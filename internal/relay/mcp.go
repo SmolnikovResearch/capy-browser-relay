@@ -37,7 +37,8 @@ func obj(props map[string]any, required ...string) map[string]any {
 }
 
 var str = func(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
-var tabID = map[string]any{"type": "integer", "description": "Tab id from browser_tabs_list"}
+var tabID = map[string]any{"type": "integer", "description": "Tab id from browser_tabs_list. Only tabs this agent opened in this session."}
+var sessionField = str("Stable id of this chat. Tabs stay private to this agent and this session.")
 var target = func(m map[string]any) map[string]any {
 	m["tab_id"] = tabID
 	m["selector"] = str("CSS selector")
@@ -53,23 +54,32 @@ var (
 var tools = []tool{
 	{Name: "browser_list", Annotations: readOnly, Description: "List the user's paired browsers and whether they are online.",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}}},
-	{Name: "browser_tabs_list", Annotations: readOnly, Description: "List open tabs (only pages this agent is allowed to see).", cmd: "tabs_list", scope: ScopeRead,
-		InputSchema: obj(map[string]any{})},
-	{Name: "browser_tabs_open", Annotations: acting, Description: "Open a URL in a new tab.", cmd: "tabs_open", scope: ScopeAct, required: []string{"url"},
-		InputSchema: obj(map[string]any{"url": str("http(s) URL")}, "url")},
-	{Name: "browser_navigate", Annotations: acting, Description: "Navigate an existing tab to a URL.", cmd: "navigate", scope: ScopeAct, required: []string{"tab_id", "url"},
-		InputSchema: obj(map[string]any{"tab_id": tabID, "url": str("http(s) URL")}, "tab_id", "url")},
-	{Name: "browser_read_page", Annotations: readOnly, Description: "Read a tab: mode=text returns visible text, mode=snapshot returns a DOM/accessibility snapshot with element refs.",
+	{Name: "browser_tabs_list", Annotations: readOnly, Description: "List tabs this agent opened in this session. Other agents' tabs and the user's own tabs are omitted.", cmd: "tabs_list", scope: ScopeRead,
+		InputSchema: obj(map[string]any{"session": sessionField})},
+	{Name: "browser_tabs_open", Annotations: acting, Description: "Open a URL in this agent session's tab group. The tab stays inactive and Chrome is not brought to the foreground.", cmd: "tabs_open", scope: ScopeAct, required: []string{"url"},
+		InputSchema: obj(map[string]any{"url": str("http(s) URL"), "session": sessionField}, "url")},
+	{Name: "browser_navigate", Annotations: acting, Description: "Navigate a tab this agent opened. Other sessions' tabs are refused.", cmd: "navigate", scope: ScopeAct, required: []string{"tab_id", "url"},
+		InputSchema: obj(map[string]any{"tab_id": tabID, "url": str("http(s) URL"), "session": sessionField}, "tab_id", "url")},
+	{Name: "browser_read_page", Annotations: readOnly, Description: "Read a tab this agent opened. mode=text returns visible text, mode=snapshot returns a DOM snapshot with element refs.",
 		cmd: "read_page", scope: ScopeRead, required: []string{"tab_id"},
-		InputSchema: obj(map[string]any{"tab_id": tabID, "mode": map[string]any{"type": "string", "enum": []string{"text", "snapshot"}}}, "tab_id")},
-	{Name: "browser_click", Annotations: acting, Description: "Click an element (selector or ref).", cmd: "click", scope: ScopeAct, required: []string{"tab_id"},
-		InputSchema: obj(target(map[string]any{}), "tab_id")},
-	{Name: "browser_type", Annotations: acting, Description: "Type text into an element (keystrokes). Password fields are refused (needs_human).", cmd: "type", scope: ScopeAct, required: []string{"tab_id", "text"},
-		InputSchema: obj(target(map[string]any{"text": str("Text to type")}), "tab_id", "text")},
-	{Name: "browser_form_input", Annotations: acting, Description: "Set the value of a form field. Password fields are refused (needs_human).", cmd: "form_input", scope: ScopeAct, required: []string{"tab_id", "value"},
-		InputSchema: obj(target(map[string]any{"value": str("Value to set")}), "tab_id", "value")},
-	{Name: "browser_screenshot", Annotations: readOnly, Description: "Screenshot of a tab (PNG).", cmd: "screenshot", scope: ScopeRead, required: []string{"tab_id"},
-		InputSchema: obj(map[string]any{"tab_id": tabID}, "tab_id")},
+		InputSchema: obj(map[string]any{"tab_id": tabID, "session": sessionField, "mode": map[string]any{"type": "string", "enum": []string{"text", "snapshot"}}}, "tab_id")},
+	{Name: "browser_click", Annotations: acting, Description: "Click an element in a tab this agent opened (selector or ref).", cmd: "click", scope: ScopeAct, required: []string{"tab_id"},
+		InputSchema: obj(target(map[string]any{"session": sessionField}), "tab_id")},
+	{Name: "browser_type", Annotations: acting, Description: "Type text into an element in a tab this agent opened. Password fields are refused (needs_human).", cmd: "type", scope: ScopeAct, required: []string{"tab_id", "text"},
+		InputSchema: obj(target(map[string]any{"text": str("Text to type"), "session": sessionField}), "tab_id", "text")},
+	{Name: "browser_form_input", Annotations: acting, Description: "Set a form field in a tab this agent opened. Password fields are refused (needs_human).", cmd: "form_input", scope: ScopeAct, required: []string{"tab_id", "value"},
+		InputSchema: obj(target(map[string]any{"value": str("Value to set"), "session": sessionField}), "tab_id", "value")},
+	{Name: "browser_screenshot", Annotations: readOnly, Description: "Screenshot a tab this agent opened, only if that tab is already visible. Never raises a window and never switches the user's tab.", cmd: "screenshot", scope: ScopeRead, required: []string{"tab_id"},
+		InputSchema: obj(map[string]any{"tab_id": tabID, "session": sessionField}, "tab_id")},
+	{Name: "browser_activate", Annotations: acting, Description: "Activate a tab this agent opened.", cmd: "activate", scope: ScopeAct, required: []string{"tab_id"},
+		InputSchema: obj(map[string]any{"tab_id": tabID, "session": sessionField}, "tab_id")},
+	{Name: "browser_set_file", Annotations: acting, Description: "Attach a file to input[type=file] in a tab this agent opened. First POST the bytes to /v1/agent/blobs, then pass that blob url and token. Does not open a file dialog and does not touch the user's tab.", cmd: "set_file", scope: ScopeAct, required: []string{"tab_id", "url", "token"},
+		InputSchema: obj(target(map[string]any{
+			"url": str("Blob URL returned by POST /v1/agent/blobs"),
+			"token": str("Blob token returned with that URL"),
+			"filename": str("File name, for example video.mp4"),
+			"session": sessionField,
+		}), "tab_id", "url", "token")},
 }
 
 func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +122,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			"protocolVersion": ver,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "capy-browser-relay", "version": "0.1.0"},
-			"instructions":    "Controls the owner's real browser through a relay. Call browser_list first; pass tab ids from browser_tabs_list.",
+			"instructions":    "Controls the owner's real browser through a relay. Pass the same session string on every call from one chat. browser_tabs_open adds an inactive tab to that session's tab group and does not focus Chrome. Do not reuse another session's tab id. Never switch the user's current tab. To upload a video, POST the file to /v1/agent/blobs and then call browser_set_file with the returned url and token.",
 		})
 	case "ping":
 		reply(map[string]any{})

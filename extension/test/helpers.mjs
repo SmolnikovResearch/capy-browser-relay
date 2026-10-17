@@ -3,7 +3,9 @@ import { createCommands } from '../lib/commands.js';
 
 export function fakeBrowser(tabsInit = []) {
   const tabs = new Map();
+  const groups = new Map();
   let next = 1;
+  let nextGroup = 1;
   const add = (url, title = 't', extra = {}) => {
     const t = { id: next++, url, title, active: false, windowId: 1, status: 'complete', ...extra };
     tabs.set(t.id, t);
@@ -16,11 +18,30 @@ export function fakeBrowser(tabsInit = []) {
   const api = {
     tabs: {
       get: async (id) => { const t = tabs.get(id); if (!t) throw new Error('no tab'); return { ...t }; },
-      query: async () => [...tabs.values()].map((t) => ({ ...t })),
-      create: async ({ url }) => add(url),
+      query: async (q = {}) => [...tabs.values()].filter((t) => {
+        if (q.windowId != null && t.windowId !== q.windowId) return false;
+        if (q.active != null && t.active !== q.active) return false;
+        if (q.groupId != null && t.groupId !== q.groupId) return false;
+        return true;
+      }).map((t) => ({ ...t })),
+      create: async ({ url, active, windowId }) => add(url, 't', { windowId: windowId || 1, active: !!active }),
       update: async (id, o) => { Object.assign(tabs.get(id), o); return { ...tabs.get(id) }; },
       remove: async (id) => { tabs.delete(id); },
+      group: async ({ tabIds, groupId, createProperties }) => {
+        const id = groupId || nextGroup++;
+        if (!groups.has(id)) groups.set(id, { id, title: '', windowId: (createProperties && createProperties.windowId) || 1, collapsed: false });
+        for (const tid of tabIds) tabs.get(tid).groupId = id;
+        return id;
+      },
       captureVisibleTab: async (w, o) => 'data:image/png;base64,QUJD',
+    },
+    windows: {
+      getAll: async () => [{ id: 1, focused: true, type: 'normal' }],
+      update: async (id, o) => ({ id, focused: !!(o && o.focused) }),
+    },
+    tabGroups: {
+      query: async (q = {}) => [...groups.values()].filter((g) => (q.title == null || g.title === q.title) && (q.windowId == null || g.windowId === q.windowId)),
+      update: async (id, o) => { Object.assign(groups.get(id), o); return { ...groups.get(id) }; },
     },
     runPage: async (tabId, op, arg) => {
       log.push({ op, arg });
@@ -43,7 +64,7 @@ export function fakeBrowser(tabsInit = []) {
   return { tabs, add, pages, log, api };
 }
 
-export function makeCommands(br, { local = {}, confirmAnswer = { approved: false }, trusted = [] } = {}) {
+export function makeCommands(br, { local = {}, confirmAnswer = { approved: false }, trusted = [], overrides = {} } = {}) {
   const asked = [];
   const trust = {
     list: [...trusted],
@@ -55,6 +76,8 @@ export function makeCommands(br, { local = {}, confirmAnswer = { approved: false
     confirm: async (r) => { asked.push(r); return confirmAnswer; },
     trust,
     getLocal: async () => local,
+    fetchFn: async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer }),
+    ...overrides,
   });
   return { cmds, asked, trust };
 }

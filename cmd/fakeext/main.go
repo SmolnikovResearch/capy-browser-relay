@@ -17,7 +17,7 @@ func main() {
 	code := flag.String("code", "", "one-time pairing code")
 	name := flag.String("name", "fake-laptop", "device name")
 	flag.Parse()
-	x := fakeext.New(*base)
+	x := fakeext.New(*base).UseKey()
 	if s, err := x.Pair(*code, *name); err != nil || s != 201 {
 		log.Fatalf("pair failed: status=%d err=%v", s, err)
 	}

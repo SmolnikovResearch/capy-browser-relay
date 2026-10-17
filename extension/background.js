@@ -158,7 +158,29 @@ async function showBar(tabId, session) {
   });
 }
 
+async function guardMainWorld(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        if (!window.__capyMainGuards) {
+          window.__capyMainGuards = true;
+          try {
+            window.alert = () => {};
+            window.confirm = () => true;
+            window.prompt = () => null;
+            window.onbeforeunload = null;
+            window.focus = () => {};
+          } catch (e) {}
+        }
+      },
+    });
+  } catch (e) { /* ignore restricted pages */ }
+}
+
 async function runPage(tabId, op, arg) {
+  guardMainWorld(tabId).catch(() => {});
   const res = await chrome.scripting.executeScript({
     target: { tabId },
     func: capyPage,

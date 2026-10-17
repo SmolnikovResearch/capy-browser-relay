@@ -1,5 +1,7 @@
 # capy-browser-relay
 
+[English](README.md) | [Русский](README_RU.md)
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](https://go.dev)
 [![Manifest](https://img.shields.io/badge/Chrome_Extension-MV3-orange.svg)](extension/manifest.json)

@@ -459,6 +459,35 @@ func TestQueueSerialisesPerBrowser(t *testing.T) {
 	}
 }
 
+func TestCrossTabConcurrencyDoesNotBlock(t *testing.T) {
+	e := newEnv(t, nil)
+	x := e.device(e.owner, "laptop")
+	x.Delay = 80 * time.Millisecond
+	tab1 := x.AddTab("https://example.com/1", "t1", "text 1")
+	tab2 := x.AddTab("https://example.com/2", "t2", "text 2")
+	ag1 := e.agent(e.owner, all, []string{"example.com"}, nil)
+	ag2 := e.agent(e.owner, all, []string{"example.com"}, nil)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if isErr, txt := e.tool(ag1, "browser_read_page", map[string]any{"tab_id": tab1}); isErr {
+			t.Error(txt)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if isErr, txt := e.tool(ag2, "browser_read_page", map[string]any{"tab_id": tab2}); isErr {
+			t.Error(txt)
+		}
+	}()
+	wg.Wait()
+	if x.MaxPar < 2 {
+		t.Fatalf("expected cross-tab commands to execute in parallel, but MaxPar was %d", x.MaxPar)
+	}
+}
+
 func TestQueueFullAndExpiry(t *testing.T) {
 	hub := relay.NewHub()
 	hub.QueueSize = 2

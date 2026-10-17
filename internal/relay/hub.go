@@ -55,7 +55,6 @@ type job struct {
 type deviceConn struct {
 	id      string
 	conn    *ws.Conn
-	queue   chan *job
 	done    chan struct{}
 	once    sync.Once
 	mu      sync.Mutex
@@ -84,7 +83,7 @@ func (h *Hub) Online(id string) bool {
 
 // Serve registers the connection and blocks until it closes.
 func (h *Hub) Serve(id string, c *ws.Conn, registered, onClose func()) {
-	d := &deviceConn{id: id, conn: c, queue: make(chan *job, h.QueueSize), done: make(chan struct{}),
+	d := &deviceConn{id: id, conn: c, done: make(chan struct{}),
 		pending: map[string]chan Response{}, lanes: map[string]chan *job{}}
 	c.ReadTimeout = 60 * time.Second
 	h.mu.Lock()
@@ -97,7 +96,6 @@ func (h *Hub) Serve(id string, c *ws.Conn, registered, onClose func()) {
 		registered()
 	}
 
-	go h.worker(d)
 	go func() { // keepalive
 		t := time.NewTicker(20 * time.Second)
 		defer t.Stop()
@@ -149,6 +147,12 @@ func (h *Hub) Serve(id string, c *ws.Conn, registered, onClose func()) {
 func (d *deviceConn) shutdown() {
 	d.once.Do(func() {
 		close(d.done)
+		d.mu.Lock()
+		for _, q := range d.lanes {
+			close(q)
+		}
+		d.lanes = map[string]chan *job{}
+		d.mu.Unlock()
 		d.conn.CloseNow()
 	})
 }
@@ -182,50 +186,6 @@ func laneKey(env Envelope) string {
 		return fmt.Sprintf("agent:%s", env.Agent)
 	}
 	return "global"
-}
-
-// worker routes queued commands to per-lane workers so different tabs/agents
-// can run in parallel without blocking each other, while calls on the same
-// tab/session stay serialised.
-func (h *Hub) worker(d *deviceConn) {
-	for {
-		select {
-		case <-d.done:
-			d.mu.Lock()
-			for _, q := range d.lanes {
-				close(q)
-			}
-			d.lanes = map[string]chan *job{}
-			d.mu.Unlock()
-			for {
-				select {
-				case j := <-d.queue:
-					j.resp <- Response{ID: j.env.ID, Error: errOffline}
-				default:
-					return
-				}
-			}
-		case j := <-d.queue:
-			if time.Since(j.enq) > h.QueueTTL {
-				j.resp <- Response{ID: j.env.ID, Error: errExpired}
-				continue
-			}
-			k := laneKey(j.env)
-			d.mu.Lock()
-			lq, ok := d.lanes[k]
-			if !ok {
-				lq = make(chan *job)
-				d.lanes[k] = lq
-				go h.laneWorker(d, k, lq)
-			}
-			d.mu.Unlock()
-			select {
-			case lq <- j:
-			case <-d.done:
-				j.resp <- Response{ID: j.env.ID, Error: errOffline}
-			}
-		}
-	}
 }
 
 func (h *Hub) laneWorker(d *deviceConn, lane string, q chan *job) {
@@ -299,7 +259,7 @@ func (h *Hub) laneWorker(d *deviceConn, lane string, q chan *job) {
 	}
 }
 
-// Submit queues a command for a browser and waits for the answer.
+// Submit queues a command for a browser lane and waits for the answer.
 func (h *Hub) Submit(ctx context.Context, deviceID string, env Envelope) (Response, error) {
 	h.mu.Lock()
 	d := h.conns[deviceID]
@@ -307,9 +267,24 @@ func (h *Hub) Submit(ctx context.Context, deviceID string, env Envelope) (Respon
 	if d == nil {
 		return Response{}, errOffline
 	}
+
+	k := laneKey(env)
+	d.mu.Lock()
+	lq, ok := d.lanes[k]
+	if !ok {
+		qSize := h.QueueSize
+		if qSize <= 0 {
+			qSize = 32
+		}
+		lq = make(chan *job, qSize)
+		d.lanes[k] = lq
+		go h.laneWorker(d, k, lq)
+	}
+	d.mu.Unlock()
+
 	j := &job{env: env, enq: time.Now(), resp: make(chan Response, 1)}
 	select {
-	case d.queue <- j:
+	case lq <- j:
 	default:
 		return Response{}, errQueueFull
 	}

@@ -14,8 +14,17 @@ const COPY = {
     relay: 'Адрес',
     code: 'Одноразовый код',
     name: 'Имя браузера',
-    connect: 'Подключить',
+    connect: 'Подключить по коду',
+    localBtn: 'На этом компьютере',
+    localHint: 'Релей на 127.0.0.1, без кода. Куки этого Chrome уже здесь. Код ниже нужен, только если агент на другом компьютере.',
+    localFail: 'Релей на этом компьютере не ответил',
+    localNeedsCode: 'На этом реле несколько владельцев. Нужен код.',
     pairHint: 'Код даёт тот, кто держит релей. Он сгорает через пять минут.',
+    spaces: 'Пространства',
+    driving: 'агент работает',
+    released: 'отдано',
+    release: 'Отпустить',
+    finish: 'Закрыть',
     pause: 'Пауза',
     resume: 'Снять паузу',
     revoke: 'Отключить',
@@ -51,8 +60,17 @@ const COPY = {
     relay: 'Address',
     code: 'One-time code',
     name: 'Browser name',
-    connect: 'Connect',
+    connect: 'Connect with a code',
+    localBtn: 'On this computer',
+    localHint: 'Relay on 127.0.0.1, no code. This Chrome already has the logins. The code below is only for an agent on another computer.',
+    localFail: 'The relay on this computer did not answer',
+    localNeedsCode: 'This relay has more than one owner. A code is required.',
     pairHint: 'The code comes from whoever runs the relay. It dies after five minutes.',
+    spaces: 'Spaces',
+    driving: 'agent working',
+    released: 'released',
+    release: 'Release',
+    finish: 'Close',
     pause: 'Pause',
     resume: 'Resume',
     revoke: 'Disconnect',
@@ -97,6 +115,8 @@ function applyCopy() {
   label($('labCode'), c.code);
   label($('labName'), c.name);
   $('pairBtn').textContent = c.connect;
+  $('localBtn').textContent = c.localBtn;
+  $('localHint').textContent = c.localHint;
   $('pairHint').textContent = c.pairHint;
   $('connTitle').textContent = c.pair;
   $('revokeBtn').textContent = c.revoke;
@@ -198,6 +218,49 @@ async function refresh() {
   }
   const act = await send({ type: 'activity' });
   render(await notes(), (act && act.list) || []);
+  const spaces = await send({ type: 'spaces' });
+  renderSpaces((spaces && spaces.spaces) || []);
+}
+
+function renderSpaces(list) {
+  const box = $('spaces');
+  const ul = $('spaceList');
+  if (!box || !ul) return;
+  ul.replaceChildren();
+  if (!list.length) { box.hidden = true; return; }
+  box.hidden = false;
+  $('spacesTitle').textContent = t().spaces;
+  for (const sp of list) {
+    const li = document.createElement('li');
+    const who = document.createElement('div');
+    who.className = 'who';
+    const name = document.createElement('b');
+    name.textContent = sp.name;
+    const sub = document.createElement('span');
+    const bits = [String(sp.tab_count), sp.released ? t().released : t().driving];
+    if (sp.host) bits.push(sp.host);
+    sub.textContent = bits.join(' · ');
+    who.append(name, sub);
+    const rel = document.createElement('button');
+    rel.type = 'button';
+    rel.className = 'text-btn';
+    rel.textContent = t().release;
+    rel.hidden = !!sp.released;
+    rel.addEventListener('click', async () => {
+      await send({ type: 'space_release', title: sp.name });
+      refresh();
+    });
+    const fin = document.createElement('button');
+    fin.type = 'button';
+    fin.className = 'text-btn';
+    fin.textContent = t().finish;
+    fin.addEventListener('click', async () => {
+      await send({ type: 'space_finish', title: sp.name });
+      refresh();
+    });
+    li.append(who, rel, fin);
+    ul.append(li);
+  }
 }
 
 $('langBtn').addEventListener('click', async () => {
@@ -226,6 +289,21 @@ $('ask').addEventListener('input', () => {
   $('ask').style.height = 'auto';
   $('ask').style.height = Math.min($('ask').scrollHeight, 120) + 'px';
   $('send').disabled = !$('ask').value.trim();
+});
+
+function localMessage(r) {
+  const err = (r && r.error) || '';
+  if (err.includes('use a code')) return t().localNeedsCode;
+  return err || t().localFail;
+}
+
+$('localBtn').addEventListener('click', async () => {
+  say('');
+  const r = await send({ type: 'pair_local', name: $('devname').value });
+  if (!r || !r.ok) { say(localMessage(r)); return; }
+  say(t().paired, true);
+  show('home');
+  refresh();
 });
 
 $('pairBtn').addEventListener('click', async () => {

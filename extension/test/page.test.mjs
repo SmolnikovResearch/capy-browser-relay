@@ -141,6 +141,34 @@ test('page.js: snapshot extracts interactive elements with roles, names, and rec
   assert.ok(inputSnap);
   assert.equal(inputSnap.name, 'User Name');
   assert.equal(inputSnap.value, 'hello agent');
+  assert.equal(res.scope, 'viewport');
+});
+
+test('page.js: viewport snapshot skips controls below the screen and page scope keeps them', () => {
+  const { doc, makeEl } = createMockDOM();
+  globalThis.document = doc;
+  globalThis.location = doc.location;
+  globalThis.window = { innerHeight: 100, innerWidth: 200 };
+  globalThis.innerHeight = 100;
+  globalThis.innerWidth = 200;
+  globalThis.getComputedStyle = () => ({ display: 'block', visibility: 'visible' });
+
+  const seen = makeEl('button', { innerText: 'In view' });
+  const below = makeEl('button', { innerText: 'Below' });
+  below.getBoundingClientRect = () => ({ x: 10, y: 400, width: 80, height: 20, top: 400, bottom: 420, left: 10, right: 90 });
+  const heading = makeEl('h2', { innerText: 'Section' });
+  doc.body.appendChild(seen);
+  doc.body.appendChild(below);
+  doc.body.appendChild(heading);
+
+  const view = capyPage('snapshot', { scope: 'viewport' });
+  assert.ok(view.snapshot.some((x) => x.name === 'In view'));
+  assert.ok(view.snapshot.some((x) => x.role === 'heading' && x.name === 'Section'));
+  assert.equal(view.snapshot.some((x) => x.name === 'Below'), false);
+
+  const page = capyPage('snapshot', { scope: 'page' });
+  assert.ok(page.snapshot.some((x) => x.name === 'Below'));
+  assert.equal(page.scope, 'page');
 });
 
 test('page.js: click dispatches full pointer and mouse event chain', () => {

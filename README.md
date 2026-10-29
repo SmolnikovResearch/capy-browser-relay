@@ -58,19 +58,20 @@ Other endpoints: `GET /v1/owner/devices`, `GET /v1/owner/agents`, `POST /mcp`, `
 
 ## MCP tools
 
-`browser_list`, `browser_tabs_list`, `browser_tabs_open`, `browser_navigate`, `browser_read_page`
-(`mode: text|snapshot`), `browser_click`, `browser_type`, `browser_form_input`, `browser_screenshot`.
+`browser_list`, `browser_tabs_list`, `browser_spaces_list`, `browser_tabs_open`, `browser_space_release`,
+`browser_space_finish`, `browser_navigate`, `browser_read_page`
+(`mode: text|snapshot`, snapshot `scope: viewport|page`), `browser_click`, `browser_type`, `browser_form_input`, `browser_screenshot`.
 Every tool takes an optional `browser` (id or name); with several browsers online it is required.
 `tools/list` shows only tools the agent token has the scope for. Tools carry `readOnlyHint` annotations;
 Codex needs them to call read tools in non-interactive mode.
 
-Scopes: `read` (tabs_list, read_page, screenshot), `act` (tabs_open, navigate, click, type, form_input),
+Scopes: `read` (tabs_list, spaces_list, read_page, screenshot), `act` (tabs_open, space_finish, space_release, navigate, click, type, form_input),
 `upload` (file_upload, not exposed over MCP yet), `record` (reserved).
 
 ## Security model in slice 1
 
 - Tokens (owner, device, agent) are 256-bit random, stored as SHA-256 hashes, shown once. Device and agent tokens are separate kinds and are not interchangeable.
-- Pairing code: 5 minutes, single use, 10 wrong attempts per IP per 5 minutes, then HTTP 429.
+- Pairing code: 5 minutes, single use, 10 wrong attempts per IP per 5 minutes, then HTTP 429. On the same computer, `POST /v1/pair/local` takes no code: the request must come from loopback, from a `chrome-extension://` origin, with no proxy headers, and the relay must have exactly one owner. A browser on another computer still uses a code.
 - Revoking a device closes its socket at once (about 1 ms locally, limit 2 s); revoking an agent token or the kill switch takes effect on the next request.
 - Domain allowlist per agent. Empty list allows nothing. Non-http(s) URLs, the Chrome Web Store, and a built-in deny list (banks, mail, gosuslugi) are never allowed. The relay checks navigation targets, filters `tabs_list`, and drops any result whose page URL is outside the list; the extension is expected to check as well (the fake one does).
 - Dangerous actions: the extension answers `needs_confirmation`, or the command is in the relay's always-confirm set; the relay calls the `Confirmer` hook. The default stub logs and declines, so the action does not run. Passwords: the extension answers `needs_human`.
@@ -159,7 +160,7 @@ Browser end-to-end tests belong to slice 2 and run on the old laptop.
 
 ## Extension (slice 2)
 
-`extension/`: MV3, service worker, no build step. Name "CapyAgent Browser", version 0.4.10. A fresh extension: the published
+`extension/`: MV3, service worker, no build step. Name "CapyAgent Browser", version 1.5.0. A fresh extension: the published
 CapyAgent extension is a side panel for the local core on 127.0.0.1 with no relay client, so only its icons were reused.
 
 - Pairing: popup, relay address + one-time code + device name. https required except for localhost. Device token in `chrome.storage.local`, key in IndexedDB.

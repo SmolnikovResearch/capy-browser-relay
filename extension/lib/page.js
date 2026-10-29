@@ -225,6 +225,19 @@ export function capyPage(op, a) {
     el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
   }
 
+  function inViewport(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 0;
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 0;
+    if (!vh || !vw) return true;
+    const top = rect.top == null ? rect.y : rect.top;
+    const left = rect.left == null ? rect.x : rect.left;
+    const bottom = rect.bottom == null ? top + rect.height : rect.bottom;
+    const right = rect.right == null ? left + rect.width : rect.right;
+    return bottom > 0 && right > 0 && top < vh && left < vw;
+  }
+
   switch (op) {
     case 'text': {
       const dialog = uploadDialog();
@@ -243,6 +256,7 @@ export function capyPage(op, a) {
       return { url: location.href, title: document.title, text: text, truncated: text.length >= 80000 };
     }
     case 'snapshot': {
+      const scope = a && a.scope === 'page' ? 'page' : 'viewport';
       const root = uploadDialog() || document.body || document.documentElement;
       const out = [];
       const start = performance.now();
@@ -252,9 +266,12 @@ export function capyPage(op, a) {
         seen++;
         const tag = el.localName || '';
         const role = el.getAttribute && el.getAttribute('role');
-        const interesting = tag === 'button' || tag === 'a' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'ytcp-button' || role === 'button' || role === 'textbox' || role === 'menuitem' || role === 'tab' || role === 'link' || role === 'checkbox' || role === 'radio' || role === 'combobox';
+        const heading = tag === 'h1' || tag === 'h2' || tag === 'h3';
+        const interesting = heading || tag === 'button' || tag === 'a' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'ytcp-button' || role === 'button' || role === 'textbox' || role === 'menuitem' || role === 'tab' || role === 'link' || role === 'checkbox' || role === 'radio' || role === 'combobox';
         if (!interesting) return;
-        const it = { ref: refOf(el), role: roleOf(el), name: shortName(el) };
+        if (scope === 'viewport' && !inViewport(el)) return;
+        const it = { ref: refOf(el), role: heading ? 'heading' : roleOf(el), name: shortName(el) };
+        if (heading) it.level = Number(tag.slice(1));
         const ty = (el.type || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea' || tag === 'select') {
           it.type = ty || tag;
@@ -266,6 +283,7 @@ export function capyPage(op, a) {
         const rect = el.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
           it.rect = { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) };
+          it.in_view = inViewport(el);
         }
         out.push(it);
       }
@@ -284,7 +302,7 @@ export function capyPage(op, a) {
         }
       }
       walk(root);
-      return { url: location.href, title: document.title, snapshot: out };
+      return { url: location.href, title: document.title, scope, snapshot: out };
     }
     case 'describe': {
       const f = find(a);

@@ -297,6 +297,46 @@ test('two sessions of one agent do not share tabs', async () => {
   assert.equal(br.tabs.get(1).url, 'https://www.youtube.com/keep');
 });
 
+test('a session space lists only its own tabs and does not close the user tab', async () => {
+  const br = fakeBrowser(['https://www.youtube.com/keep']);
+  br.tabs.get(1).active = true;
+  const hidden = [];
+  const { cmds } = makeCommands(br, { overrides: { hideBar: async (id) => { hidden.push(id); } } });
+  const a = ok(await cmds.handle(env('tabs_open', { url: 'https://example.com/a', session: 'chat' }))).tab_id;
+  const b = ok(await cmds.handle(env('tabs_open', { url: 'https://example.com/b', session: 'chat' }))).tab_id;
+  ok(await cmds.handle(env('tabs_open', { url: 'https://example.com/other', session: 'other' })));
+  br.tabs.get(a).active = true;
+  const listed = ok(await cmds.handle(env('spaces_list', { session: 'chat' })));
+  const mine = listed.spaces.find((s) => s.mine);
+  assert.deepEqual(mine.tabs.map((t) => t.id).sort(), [a, b]);
+  const other = listed.spaces.find((s) => !s.mine);
+  assert.equal(other.tab_count, 1);
+  assert.equal(other.tabs, undefined);
+  const finished = ok(await cmds.handle(env('space_finish', { session: 'chat' })));
+  assert.equal(finished.closed, 1);
+  assert.equal(finished.kept_active, 1);
+  assert.equal(br.tabs.has(1), true);
+  assert.equal(br.tabs.has(a), true);
+  assert.equal(br.tabs.has(b), false);
+  const released = ok(await cmds.handle(env('space_release', { session: 'chat' })));
+  assert.equal(released.released, 1);
+  assert.deepEqual(hidden, [a]);
+  err(await cmds.handle(env('read_page', { tab_id: a, session: 'chat' })), 'not_your_tab');
+  assert.equal(br.tabs.get(1).url, 'https://www.youtube.com/keep');
+  assert.equal(br.tabs.get(a).active, true);
+});
+
+test('read_page snapshot asks for the viewport unless scope is page', async () => {
+  const br = fakeBrowser(['https://www.youtube.com/keep']);
+  const { cmds } = makeCommands(br);
+  const id = ok(await cmds.handle(env('tabs_open', { url: 'https://example.com/s', session: 's' }))).tab_id;
+  ok(await cmds.handle(env('read_page', { tab_id: id, mode: 'snapshot', session: 's' })));
+  assert.equal(br.log.at(-1).op, 'snapshot');
+  assert.equal(br.log.at(-1).arg.scope, 'viewport');
+  ok(await cmds.handle(env('read_page', { tab_id: id, mode: 'snapshot', scope: 'page', session: 's' })));
+  assert.equal(br.log.at(-1).arg.scope, 'page');
+});
+
 test('tabs_open automatically mutes tab and isolates sound', async () => {
   const br = fakeBrowser(['https://www.youtube.com/keep']);
   const { cmds } = makeCommands(br);

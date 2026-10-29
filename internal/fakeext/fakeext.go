@@ -251,6 +251,10 @@ func (c *Client) handle(env relay.Envelope) relay.Response {
 			}
 		}
 		return ok(env.ID, map[string]any{"tabs": list}) // unfiltered on purpose: relay filters
+	case "spaces_list":
+		return ok(env.ID, map[string]any{"spaces": []any{}})
+	case "space_finish", "space_release":
+		return ok(env.ID, map[string]any{"ok": true})
 	case "tabs_open":
 		if !allowed(a.URL) {
 			return fail(env.ID, "domain_denied", "extension: domain not allowed")

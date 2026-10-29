@@ -5,7 +5,7 @@ import { createCommands } from './lib/commands.js';
 import { capyPage } from './lib/page.js';
 import * as K from './lib/keys.js';
 
-const LOCAL_KEYS = ['relay', 'deviceId', 'token', 'expires', 'name', 'pub', 'paused', 'localAllowed', 'localDenied'];
+const LOCAL_KEYS = ['relay', 'deviceId', 'token', 'expires', 'name', 'pub', 'paused', 'localAllowed', 'localDenied', 'localOptOut'];
 
 const store = {
   async get() {
@@ -158,6 +158,18 @@ async function showBar(tabId, session) {
   });
 }
 
+async function hideBar(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      for (const id of ['capy-agent-bar', 'capy-agent-frame']) {
+        const node = document.getElementById(id);
+        if (node) node.remove();
+      }
+    },
+  });
+}
+
 async function guardMainWorld(tabId) {
   try {
     await chrome.scripting.executeScript({
@@ -214,6 +226,7 @@ const commands = createCommands({
   },
   fetchFn: (...args) => fetch(...args),
   showBar,
+  hideBar,
   runPage,
   confirm,
   trust,
@@ -318,9 +331,21 @@ function bootstrapPair() {
     if (cfg.token) return;
     const until = Date.now() + 90000;
     let last = 'wait';
+    let stopLocal = false;
     while (Date.now() < until) {
       const cur = await store.get();
       if (cur.token) return;
+      if (cur.localOptOut) stopLocal = true;
+      if (!stopLocal) {
+        try {
+          await client.pairLocal({ name: cur.name || 'Chrome' });
+          try { await chrome.storage.local.set({ bootNote: 'local' }); } catch { /* ignore */ }
+          return;
+        } catch (e) {
+          const msg = String(e && e.message || e);
+          if (msg.includes('use a code') || msg.includes('was refused')) stopLocal = true;
+        }
+      }
       try {
         const resp = await fetch('http://127.0.0.1:18793/capy-bootstrap.json', { cache: 'no-store' });
         if (resp.ok) {
@@ -381,7 +406,12 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
       }
       case 'pair':
         try { await client.pair(msg); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message || e) }; }
+      case 'pair_local':
+        try { await client.pairLocal({ name: msg.name }); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message || e) }; }
       case 'unpair': await client.unpair(); await trust.clear(); return { ok: true };
+      case 'spaces': return { ok: true, spaces: await commands.userSpaces() };
+      case 'space_finish': return { ok: true, ...(await commands.userFinish(msg.title)) };
+      case 'space_release': return { ok: true, ...(await commands.userRelease(msg.title)) };
       case 'pause': await client.setPaused(true); return { ok: true };
       case 'resume': await client.setPaused(false); return { ok: true };
       case 'set_local': {

@@ -167,7 +167,41 @@ export function createClient(d) {
     if (resp.status !== 201) {
       throw new Error(resp.status === 403 ? 'the code is wrong or expired' : resp.status === 429 ? 'too many wrong codes, wait a few minutes' : (body.error || 'pairing failed: ' + resp.status));
     }
-    await d.store.patch({ relay: origin, deviceId: body.device_id, token: body.device_token, expires: body.expires_at, name, pub, paused: false });
+    await d.store.patch({ relay: origin, deviceId: body.device_id, token: body.device_token, expires: body.expires_at, name, pub, paused: false, localOptOut: false });
+    attempt = 0;
+    await connect();
+    return { deviceId: body.device_id };
+  }
+
+  // Same computer: the relay on 127.0.0.1 accepts the extension key and no code.
+  // A remote relay still goes through pair().
+  async function pairLocal({ name } = {}) {
+    const origin = 'http://127.0.0.1:18791';
+    name = String(name || d.defaultName || 'Chrome').trim().slice(0, 64);
+    if (!name) throw new Error('name the device');
+    await disconnect();
+    let kp = await d.keys.get();
+    let pub = await d.keys.pub(kp);
+    if (!pub) {
+      await d.keys.remove();
+      kp = await d.keys.create();
+      pub = await d.keys.pub(kp);
+    }
+    let resp;
+    try {
+      resp = await d.fetchFn(origin + '/v1/pair/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, profile: 'Default', public_key: pub, signature: await d.keys.sign(kp, 'capy-pair|local|' + name) }),
+      });
+    } catch {
+      throw new Error('cannot reach the local relay');
+    }
+    const body = await resp.json().catch(() => ({}));
+    if (resp.status !== 201) {
+      throw new Error(resp.status === 409 ? 'local pairing needs exactly one relay owner; use a code' : resp.status === 403 ? 'local pairing was refused' : (body.error || 'pairing failed: ' + resp.status));
+    }
+    await d.store.patch({ relay: origin, deviceId: body.device_id, token: body.device_token, expires: body.expires_at, name, pub, paused: false, localOptOut: false });
     attempt = 0;
     await connect();
     return { deviceId: body.device_id };
@@ -182,7 +216,7 @@ export function createClient(d) {
       } catch { /* offline: the owner can revoke from the relay side */ }
     }
     await d.keys.remove();
-    await d.store.patch({ token: '', deviceId: '', pub: '', expires: '' });
+    await d.store.patch({ token: '', deviceId: '', pub: '', expires: '', localOptOut: true });
     setStatus('unpaired');
   }
 
@@ -191,5 +225,5 @@ export function createClient(d) {
     if (p) { await disconnect(); setStatus('paused'); } else { await connect(); }
   }
 
-  return { connect, disconnect, ensure, pair, unpair, setPaused, state: () => ({ status, detail }) };
+  return { connect, disconnect, ensure, pair, pairLocal, unpair, setPaused, state: () => ({ status, detail }) };
 }

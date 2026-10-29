@@ -109,6 +109,14 @@ h1 {
   text-align: center;
 }
 .detail { margin: 0 16px 8px; font-size: 13px; }
+.spaces { margin: 0 16px 8px; }
+.spaces h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--tusklo); }
+.spaces ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.spaces li { display: flex; align-items: center; gap: 6px; background: var(--poverhnost); border: 1px solid var(--kray); border-radius: 12px; padding: 4px 4px 4px 10px; }
+.spaces .who { flex: 1; min-width: 0; }
+.spaces .who b { display: block; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spaces .who span { display: block; color: var(--tusklo); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spaces button { min-height: 32px; padding: 0 8px; }
 
 .row { display: flex; margin: 0 0 12px; }
 .row.me { justify-content: flex-end; }

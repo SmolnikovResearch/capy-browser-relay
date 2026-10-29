@@ -50,7 +50,9 @@
       <label>Адрес<input id="relay" placeholder="https://relay.example.com" autocomplete="off" spellcheck="false"></label>
       <label>Одноразовый код<input id="code" placeholder="ABCD2345" autocomplete="off" maxlength="12" spellcheck="false"></label>
       <label>Имя этого браузера<input id="devname" placeholder="MacBook" autocomplete="off" maxlength="64"></label>
-      <button id="pairBtn" class="primary" type="button">Подключить</button>
+      <button id="localBtn" class="primary" type="button">На этом компьютере</button>
+      <p class="hint">Релей на 127.0.0.1, без кода. Куки этого Chrome уже здесь. Код ниже нужен, только если агент на другом компьютере.</p>
+      <button id="pairBtn" class="primary" type="button">Подключить по коду</button>
       <p class="hint">Код даёт тот, кто держит релей. Он сгорает через пять минут.</p>
     </section>
 

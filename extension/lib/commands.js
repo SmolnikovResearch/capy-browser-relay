@@ -11,7 +11,7 @@ export class CmdErr extends Error {
   }
 }
 
-export const COMMANDS = ['tabs_list', 'tabs_open', 'navigate', 'read_page', 'click', 'type', 'form_input', 'screenshot', 'set_file'];
+export const COMMANDS = ['tabs_list', 'tabs_open', 'navigate', 'read_page', 'click', 'type', 'form_input', 'screenshot', 'set_file', 'spaces_list', 'space_finish', 'space_release'];
 
 function b64Bytes(bytes) {
   if (typeof Buffer !== 'undefined') return Promise.resolve(Buffer.from(bytes).toString('base64'));
@@ -34,7 +34,7 @@ function ownerKey(env, args) {
 }
 
 export function createCommands(deps) {
-  const { tabs, windows, tabGroups, runPage, confirm, trust, getLocal, waitForLoad, sleep, fetchFn, showBar } = deps;
+  const { tabs, windows, tabGroups, runPage, confirm, trust, getLocal, waitForLoad, sleep, fetchFn, showBar, hideBar } = deps;
 
   const GROUP_COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
   function groupColor(key) {
@@ -143,6 +143,61 @@ export function createCommands(deps) {
     await saveLeases();
   }
 
+  // A space is this session's collapsed tab group. Ungrouped tabs are the user's.
+  async function grouped() {
+    const all = await tabs.query({});
+    const by = new Map();
+    for (const t of all) {
+      const name = await groupTitle(t);
+      if (!name) continue;
+      if (!by.has(name)) by.set(name, []);
+      by.get(name).push(t);
+    }
+    return by;
+  }
+
+  async function userSpaces() {
+    const spaces = [];
+    for (const [name, list] of await grouped()) {
+      const host = (list[0] && (parseHttpUrl(urlOf(list[0])) || {}).hostname) || '';
+      spaces.push({ name, tab_count: list.length, released: name.startsWith('отдан:'), host });
+    }
+    return spaces;
+  }
+
+  // Close only inactive tabs in this group. The tab the user is looking at stays.
+  async function userFinish(title) {
+    title = String(title || '').slice(0, 48);
+    if (!title) return { closed: 0, kept_active: 0 };
+    let closed = 0;
+    let kept = 0;
+    for (const t of (await grouped()).get(title) || []) {
+      if (t.active) { kept++; continue; }
+      await tabs.remove(t.id);
+      await forget(t.id);
+      closed++;
+    }
+    return { closed, kept_active: kept };
+  }
+
+  // The agent loses the tabs. They stay inactive, the plaque comes off,
+  // and the group title no longer matches the session key.
+  async function userRelease(title) {
+    title = String(title || '').slice(0, 48);
+    if (!title || title.startsWith('отдан:')) return { released: 0 };
+    const list = (await grouped()).get(title) || [];
+    let gid = 0;
+    for (const t of list) {
+      await forget(t.id);
+      if (hideBar) await hideBar(t.id).catch(() => {});
+      if (t.groupId > 0) gid = t.groupId;
+    }
+    if (gid && tabGroups && tabGroups.update) {
+      await tabGroups.update(gid, { title: ('отдан:' + title).slice(0, 40), collapsed: true, color: 'grey' });
+    }
+    return { released: list.length };
+  }
+
   async function pol(env) {
     const local = (await getLocal()) || {};
     return {
@@ -220,6 +275,33 @@ export function createCommands(deps) {
       return { tabs: tabsOut, v: 2 };
     },
 
+    async spaces_list(env, a, p) {
+      const title = ownerKey(env, a).slice(0, 40);
+      const spaces = [];
+      for (const [name, list] of await grouped()) {
+        if (name.startsWith('отдан:')) continue;
+        const mine = name === title;
+        const item = { name, mine, tab_count: list.length };
+        if (mine) {
+          item.tabs = [];
+          for (const t of list) {
+            if (!isAllowed(urlOf(t), p)) continue;
+            item.tabs.push({ id: t.id, url: urlOf(t), title: t.title || '', active: !!t.active });
+          }
+        }
+        spaces.push(item);
+      }
+      return { spaces };
+    },
+
+    async space_finish(env, a) {
+      return userFinish(ownerKey(env, a).slice(0, 40));
+    },
+
+    async space_release(env, a) {
+      return userRelease(ownerKey(env, a).slice(0, 40));
+    },
+
     async tabs_open(env, a, p) {
       const url = String(a.url || '');
       if (!isAllowed(url, p)) throw new CmdErr('domain_denied', 'extension: domain not allowed');
@@ -265,7 +347,8 @@ export function createCommands(deps) {
     async read_page(env, a, p) {
       await owns(a.tab_id, ownerKey(env, a));
       await allowedTab(a.tab_id, p);
-      const r = await inPage(a.tab_id, a.mode === 'snapshot' ? 'snapshot' : 'text');
+      const snap = a.mode === 'snapshot';
+      const r = await inPage(a.tab_id, snap ? 'snapshot' : 'text', snap ? { scope: a.scope === 'page' ? 'page' : 'viewport' } : undefined);
       const t = await recheck(a.tab_id, p);
       return { ...r, url: urlOf(t) };
     },
@@ -386,5 +469,5 @@ export function createCommands(deps) {
     }
   }
 
-  return { handle, forget, claim, leases };
+  return { handle, forget, claim, leases, userSpaces, userFinish, userRelease };
 }

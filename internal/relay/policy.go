@@ -16,17 +16,20 @@ var validScopes = map[string]bool{ScopeRead: true, ScopeAct: true, ScopeUpload: 
 
 // cmdScope maps a relay command to the scope it needs.
 var cmdScope = map[string]string{
-	"tabs_list":   ScopeRead,
-	"read_page":   ScopeRead,
-	"screenshot":  ScopeRead,
-	"tabs_open":   ScopeAct,
-	"navigate":    ScopeAct,
-	"click":       ScopeAct,
-	"type":        ScopeAct,
-	"form_input":  ScopeAct,
-	"activate":    ScopeAct,
-	"set_file":    ScopeAct, // browser_set_file: blob already stored by the agent, tab stays inactive
-	"file_upload": ScopeUpload, // not exposed over MCP in slice 1, kept for the contract
+	"tabs_list":     ScopeRead,
+	"spaces_list":   ScopeRead,
+	"read_page":     ScopeRead,
+	"screenshot":    ScopeRead,
+	"tabs_open":     ScopeAct,
+	"space_finish":  ScopeAct,
+	"space_release": ScopeAct,
+	"navigate":      ScopeAct,
+	"click":         ScopeAct,
+	"type":          ScopeAct,
+	"form_input":    ScopeAct,
+	"activate":      ScopeAct,
+	"set_file":      ScopeAct,    // browser_set_file: blob already stored by the agent, tab stays inactive
+	"file_upload":   ScopeUpload, // not exposed over MCP in slice 1, kept for the contract
 }
 
 // alwaysConfirm commands go through the confirmation hook before dispatch.

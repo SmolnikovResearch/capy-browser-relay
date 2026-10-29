@@ -1,6 +1,11 @@
 package relay_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -126,5 +131,87 @@ func TestAppLevelPingGetsPong(t *testing.T) {
 	conn.WriteText([]byte(`{"type":"ping"}`))
 	if _, m, err := conn.ReadMessage(); err != nil || !strings.Contains(string(m), "pong") {
 		t.Fatalf("pong: %s %v", m, err)
+	}
+}
+
+func localPairBody(name string, x *fakeext.Client) *bytes.Reader {
+	raw, _ := json.Marshal(map[string]string{
+		"name": name, "profile": "Default",
+		"public_key": x.PublicKeyB64(),
+		"signature":  x.Sign("capy-pair|local|" + name),
+	})
+	return bytes.NewReader(raw)
+}
+
+func TestLocalPairOnThisComputer(t *testing.T) {
+	e := newEnv(t, nil)
+	x := fakeext.New(e.ts.URL).UseKey()
+	req, _ := http.NewRequest("POST", e.ts.URL+"/v1/pair/local", localPairBody("Chrome", x))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "chrome-extension://abcdefghijklmnopabcdefghij")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		DeviceID string `json:"device_id"`
+		Token    string `json:"device_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || resp.StatusCode != 201 || len(out.DeviceID) < 8 || len(out.Token) < 16 {
+		t.Fatalf("local pair status %d", resp.StatusCode)
+	}
+
+	proxied, _ := http.NewRequest("POST", e.ts.URL+"/v1/pair/local", localPairBody("Chrome", x))
+	proxied.Header.Set("Origin", "chrome-extension://abcdefghijklmnopabcdefghij")
+	proxied.Header.Set("X-Forwarded-For", "8.8.8.8")
+	pr, err := http.DefaultClient.Do(proxied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, pr.Body)
+	pr.Body.Close()
+	if pr.StatusCode != 403 {
+		t.Fatalf("proxied local pair: %d", pr.StatusCode)
+	}
+
+	w := httptest.NewRecorder()
+	direct := httptest.NewRequest("POST", "http://127.0.0.1:18791/v1/pair/local", localPairBody("Chrome", x))
+	direct.Host = "capyagent.com"
+	direct.RemoteAddr = "127.0.0.1:9"
+	direct.Header.Set("Origin", "chrome-extension://abcdefghijklmnopabcdefghij")
+	e.srv.Handler().ServeHTTP(w, direct)
+	if w.Code != 403 {
+		t.Fatalf("public host: %d", w.Code)
+	}
+
+	e.newTenant("other")
+	again, _ := http.NewRequest("POST", e.ts.URL+"/v1/pair/local", localPairBody("Chrome", x))
+	again.Header.Set("Origin", "chrome-extension://abcdefghijklmnopabcdefghij")
+	ar, err := http.DefaultClient.Do(again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, ar.Body)
+	ar.Body.Close()
+	if ar.StatusCode != 409 {
+		t.Fatalf("two owners: %d", ar.StatusCode)
+	}
+}
+
+func TestLocalPairNeedsAnOwner(t *testing.T) {
+	srv, err := relay.New(relay.Config{AdminToken: "adm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := fakeext.New("http://127.0.0.1:18791").UseKey()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "http://127.0.0.1:18791/v1/pair/local", localPairBody("Chrome", x))
+	req.Host = "127.0.0.1:18791"
+	req.RemoteAddr = "127.0.0.1:9"
+	req.Header.Set("Origin", "chrome-extension://abcdefghijklmnopabcdefghij")
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != 409 {
+		t.Fatalf("no owner: %d", w.Code)
 	}
 }

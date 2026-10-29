@@ -21,6 +21,10 @@
 
   <main id="home" class="stage">
     <p id="detail" class="detail" hidden></p>
+    <section id="spaces" class="spaces" hidden>
+      <h2 id="spacesTitle"></h2>
+      <ul id="spaceList"></ul>
+    </section>
     <div id="thread" class="thread"></div>
     <p id="empty" class="empty"></p>
     <form id="dock" class="dock">
@@ -44,6 +48,8 @@
     <div class="set-body">
       <section id="pairBox" class="group">
         <h2 id="pairTitle"></h2>
+        <button id="localBtn" class="primary" type="button"></button>
+        <p id="localHint" class="hint"></p>
         <label id="labRelay"><span></span><input id="relay" autocomplete="off" spellcheck="false"></label>
         <label id="labCode"><span></span><input id="code" autocomplete="off" maxlength="12" spellcheck="false"></label>
         <label id="labName"><span></span><input id="devname" autocomplete="off" maxlength="64"></label>

@@ -102,6 +102,19 @@ $('settingsBtn').addEventListener('click', () => { say(''); show('settings'); })
 $('backBtn').addEventListener('click', () => { say(''); show('home'); });
 $('openConnect').addEventListener('click', () => { say(''); show('settings'); });
 
+$('localBtn').addEventListener('click', async () => {
+  say('');
+  const r = await send({ type: 'pair_local', name: $('devname').value });
+  if (!r || !r.ok) {
+    const err = (r && r.error) || '';
+    say(err.includes('use a code') ? 'На этом реле несколько владельцев. Нужен код.' : (err || 'Релей на этом компьютере не ответил'));
+    return;
+  }
+  say('Подключено', true);
+  show('home');
+  refresh();
+});
+
 $('pairBtn').addEventListener('click', async () => {
   say('');
   let origin;

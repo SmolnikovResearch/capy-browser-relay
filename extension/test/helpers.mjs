@@ -41,6 +41,7 @@ export function fakeBrowser(tabsInit = []) {
     },
     tabGroups: {
       query: async (q = {}) => [...groups.values()].filter((g) => (q.title == null || g.title === q.title) && (q.windowId == null || g.windowId === q.windowId)),
+      get: async (id) => { const g = groups.get(id); if (!g) throw new Error('no group'); return { ...g }; },
       update: async (id, o) => { Object.assign(groups.get(id), o); return { ...groups.get(id) }; },
     },
     runPage: async (tabId, op, arg) => {

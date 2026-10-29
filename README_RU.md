@@ -67,6 +67,8 @@ A=http://127.0.0.1:8787
 curl -XPOST $A/admin/tenants -H 'Authorization: Bearer change-me' -d '{"name":"default"}'
 # Сохраняем полученный owner_token в переменную OWNER
 
+На том же компьютере, где запущен релей, расширение подключается само к `127.0.0.1:18791`, без кода. Код нужен, только если браузер на другой машине.
+
 # 2. Получаем одноразовый 8-значный код сопряжения (действует 5 минут)
 curl -XPOST $A/v1/owner/pair-codes -H "Authorization: Bearer $OWNER"
 
@@ -93,17 +95,20 @@ curl -XPOST $A/v1/owner/agents -H "Authorization: Bearer $OWNER" \
 
 * `browser_list` — список подключенных браузеров и их онлайн-статус.
 * `browser_tabs_list` — список вкладок, открытых данным агентом.
-* `browser_tabs_open` — открытие страницы в неактивной свернутой вкладке.
+* `browser_spaces_list` — пространства агентов. Своё пространство со вкладками, чужие только по имени и числу вкладок. Вкладки пользователя не входят.
+* `browser_tabs_open` — открытие страницы в неактивной свернутой вкладке своего пространства.
+* `browser_space_release` — отпустить пространство: вкладки остаются, плашка снимается, агент их больше не ведёт.
+* `browser_space_finish` — закрыть неактивные вкладки своего пространства. Активную вкладку и вкладки пользователя не трогает.
 * `browser_navigate` — переход по адресу внутри существующей вкладки агента.
-* `browser_read_page` — чтение страницы (режимы: `mode: "text"` — форматированный текст, `mode: "snapshot"` — снимок интерактивных элементов).
+* `browser_read_page` — чтение страницы (`mode: "text"` или `mode: "snapshot"`). Снимок по умолчанию только то, что на экране (`scope: "viewport"`); `scope: "page"` обходит весь документ. Ссылки на элементы стабильны между вызовами, пока узел на странице.
 * `browser_click` — клик по элементу (`ref` или `selector`).
 * `browser_type` — эмуляция ввода текста с клавиатуры.
 * `browser_form_input` — быстрое заполнение поля формы.
 * `browser_screenshot` — снимок видимой области вкладки (отклоняется с `not_visible`, если вкладка не активна, во избежание всплытия окон).
 
 **Области доступа (scopes):**
-* `read` — `tabs_list`, `read_page`, `screenshot`
-* `act` — `tabs_open`, `navigate`, `click`, `type`, `form_input`
+* `read` — `tabs_list`, `spaces_list`, `read_page`, `screenshot`
+* `act` — `tabs_open`, `space_finish`, `space_release`, `navigate`, `click`, `type`, `form_input`
 
 ---
 

@@ -1,4 +1,4 @@
-CapyAgent Browser 0.4.10
+CapyAgent Browser 1.5.0
 
 Обычный случай. Агент и Chrome на одном компьютере. Адрес capyagent.com не нужен.
 

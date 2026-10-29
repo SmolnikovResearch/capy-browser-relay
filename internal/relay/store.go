@@ -167,6 +167,19 @@ func (s *Store) SetAdminHash(h string) {
 	s.saveLocked()
 }
 
+// SoleTenant is the local-pair target. Zero or several owners need a code.
+func (s *Store) SoleTenant() (Tenant, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.st.Tenants) != 1 {
+		return Tenant{}, false
+	}
+	for _, t := range s.st.Tenants {
+		return *t, true
+	}
+	return Tenant{}, false
+}
+
 func (s *Store) CreateTenant(name string) (Tenant, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

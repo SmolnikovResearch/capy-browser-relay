@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /v1/owner/audit", s.owner(s.handleAudit))
 	m.HandleFunc("POST /v1/owner/kill", s.owner(s.handleKill))
 	m.HandleFunc("POST /v1/pair", s.handlePair)
+	m.HandleFunc("POST /v1/pair/local", s.handlePairLocal)
 	m.HandleFunc("GET /v1/device/ws", s.handleDeviceWS)
 	m.HandleFunc("POST /v1/device/unpair", s.handleDeviceUnpair)
 	m.HandleFunc("POST /v1/agent/blobs", s.handleBlobPut)
@@ -405,6 +406,77 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 	d, tok := s.Store.AddDevice(tenant, req.Name, req.Profile, req.PublicKey, s.now(), s.cfg.DeviceTTL)
 	s.Audit.Add(Entry{Time: s.now(), Tenant: tenant, Event: "device_paired", Device: d.ID, Detail: d.Name})
 	writeJSON(w, 201, map[string]any{"device_id": d.ID, "device_token": tok, "expires_at": d.Expires})
+}
+
+// handlePairLocal pairs a browser that is already on this computer.
+// No code: the request must be loopback, carry no proxy headers, and come
+// from a Chrome extension. A public proxy in front of the relay cannot use it.
+// Several owners still need a one-time code, so the browser is not attached
+// to the wrong tenant.
+func (s *Server) handlePairLocal(w http.ResponseWriter, r *http.Request) {
+	if !localPairRequest(r) {
+		jerr(w, http.StatusForbidden, "local pairing is only for this computer")
+		return
+	}
+	ip := clientIP(r)
+	if s.pairBlocked(ip) {
+		jerr(w, http.StatusTooManyRequests, "too many wrong codes")
+		return
+	}
+	var req struct {
+		Name      string `json:"name"`
+		Profile   string `json:"profile"`
+		PublicKey string `json:"public_key"`
+		Signature string `json:"signature"`
+	}
+	if !readBody(w, r, &req, 8192) {
+		return
+	}
+	if len(req.Name) == 0 || len(req.Name) > 64 || len(req.Profile) > 64 || len(req.PublicKey) > 2048 || req.PublicKey == "" {
+		jerr(w, 400, "bad device fields")
+		return
+	}
+	if !VerifyDeviceSig(req.PublicKey, pairProofMsg("local", req.Name), req.Signature) {
+		s.pairFailed(ip)
+		jerr(w, 400, "device key proof is missing or invalid")
+		return
+	}
+	tenant, ok := s.Store.SoleTenant()
+	if !ok {
+		jerr(w, http.StatusConflict, "local pairing needs exactly one relay owner; use a code")
+		return
+	}
+	d, tok := s.Store.AddDevice(tenant.ID, req.Name, req.Profile, req.PublicKey, s.now(), s.cfg.DeviceTTL)
+	s.Audit.Add(Entry{Time: s.now(), Tenant: tenant.ID, Event: "device_paired", Device: d.ID, Detail: d.Name + " local"})
+	writeJSON(w, 201, map[string]any{"device_id": d.ID, "device_token": tok, "expires_at": d.Expires})
+}
+
+func localPairRequest(r *http.Request) bool {
+	if r.Header.Get("X-Forwarded-For") != "" || r.Header.Get("Forwarded") != "" || r.Header.Get("X-Real-IP") != "" {
+		return false
+	}
+	ip := clientIP(r)
+	if ip != "127.0.0.1" && ip != "::1" {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return false
+	}
+	const prefix = "chrome-extension://"
+	origin := r.Header.Get("Origin")
+	if !strings.HasPrefix(origin, prefix) {
+		return false
+	}
+	id := origin[len(prefix):]
+	if len(id) < 16 || len(id) > 64 || strings.ContainsAny(id, "/?#\\") {
+		return false
+	}
+	return true
 }
 
 // handleDeviceWS: the extension connects outbound and authenticates with its
